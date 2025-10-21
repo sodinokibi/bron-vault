@@ -9,7 +9,8 @@
     "start": "next start",
     "worker": "tsx worker.ts",
     "worker:dev": "tsx watch worker.ts",
-    "export:hashcat": "tsx scripts/export-for-hashcat.ts"
+    "export:hashcat": "tsx scripts/export-for-hashcat.ts",
+    "export:messaging": "tsx scripts/export-messaging-tokens.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
