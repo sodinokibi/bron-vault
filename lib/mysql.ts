@@ -55,6 +55,9 @@ export async function initializeDatabase() {
     // IMPORTANT: Ensure device statistics columns exist
     await ensureDeviceStatisticsColumns()
 
+    // IMPORTANT: Ensure Discord validation columns exist
+    await ensureDiscordValidationColumns()
+
     console.log("Database initialized successfully")
   } catch (error) {
     console.error("Database initialization error:", error)
@@ -135,6 +138,83 @@ async function ensureDeviceStatisticsColumns() {
     console.log("✅ Device statistics columns ensured")
   } catch (error) {
     console.error("❌ Error ensuring device statistics columns:", error)
+    // Don't throw - continue with existing schema
+  }
+}
+
+async function ensureDiscordValidationColumns() {
+  try {
+    console.log("🔧 Ensuring Discord validation columns exist...")
+
+    const columnsToAdd = [
+      "is_valid BOOLEAN NULL",
+      "is_validated BOOLEAN DEFAULT FALSE",
+      "validation_error TEXT NULL",
+      "global_name VARCHAR(255) NULL",
+      "avatar VARCHAR(255) NULL",
+      "discriminator VARCHAR(4) NULL",
+      "email_verified BOOLEAN NULL",
+      "phone_verified BOOLEAN NULL",
+      "premium_type TINYINT NULL COMMENT '0=None, 1=Classic, 2=Nitro, 3=Basic'",
+      "account_flags INT NULL",
+      "server_count INT NULL",
+      "friend_count INT NULL",
+      "account_created TIMESTAMP NULL",
+      "last_validated TIMESTAMP NULL",
+      "bio TEXT NULL",
+    ]
+
+    for (const column of columnsToAdd) {
+      const columnName = column.split(" ")[0]
+      const columnCheck = await executeQuery(
+        `
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'discord_tokens' AND COLUMN_NAME = ?
+      `,
+        [dbConfig.database, columnName],
+      )
+
+      if ((columnCheck as any[]).length === 0) {
+        console.log(`➕ Adding ${columnName} column to discord_tokens table...`)
+        await executeQuery(`ALTER TABLE discord_tokens ADD COLUMN ${column}`)
+      }
+    }
+
+    // Add indexes
+    const indexesToAdd = [
+      { name: "idx_is_valid", column: "is_valid" },
+      { name: "idx_is_validated", column: "is_validated" },
+      { name: "idx_premium_type", column: "premium_type" },
+      { name: "idx_server_count", column: "server_count" },
+      { name: "idx_last_validated", column: "last_validated" },
+    ]
+
+    for (const index of indexesToAdd) {
+      try {
+        const indexCheck = await executeQuery(
+          `
+          SELECT INDEX_NAME
+          FROM INFORMATION_SCHEMA.STATISTICS
+          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'discord_tokens' AND INDEX_NAME = ?
+        `,
+          [dbConfig.database, index.name],
+        )
+
+        if ((indexCheck as any[]).length === 0) {
+          console.log(`➕ Adding index ${index.name} on discord_tokens table...`)
+          await executeQuery(
+            `CREATE INDEX ${index.name} ON discord_tokens(${index.column})`,
+          )
+        }
+      } catch (error) {
+        console.log(`⚠️  Index ${index.name} might already exist or column not ready`)
+      }
+    }
+
+    console.log("✅ Discord validation columns ensured")
+  } catch (error) {
+    console.error("❌ Error ensuring Discord validation columns:", error)
     // Don't throw - continue with existing schema
   }
 }

