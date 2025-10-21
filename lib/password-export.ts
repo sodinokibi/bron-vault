@@ -6,7 +6,7 @@
  */
 
 import { RowDataPacket } from "mysql2"
-import { executeQuery } from "./db"
+import { executeQuery } from "./mysql"
 import { writeFile } from "fs/promises"
 import path from "path"
 

@@ -4,7 +4,7 @@
  * Insert and query Discord tokens, Telegram sessions, 2FA data, and crypto wallets
  */
 
-import { executeQuery } from "./db"
+import { executeQuery } from "./mysql"
 import { RowDataPacket } from "mysql2"
 import type { DiscordToken } from "./stealer-parsers/discord-parser"
 import type { TelegramSession } from "./stealer-parsers/telegram-parser"

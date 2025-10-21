@@ -130,7 +130,7 @@ export function parseBrowserWalletExtensions(browserDataPath: string): CryptoWal
       if (!dir.isDirectory()) continue
 
       const extensionId = dir.name
-      const walletName = BROWSER_WALLET_EXTENSIONS[extensionId]
+      const walletName = BROWSER_WALLET_EXTENSIONS[extensionId as keyof typeof BROWSER_WALLET_EXTENSIONS]
 
       if (walletName) {
         const extensionPath = path.join(extensionsPath, extensionId)

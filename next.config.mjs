@@ -1,5 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Webpack configuration to handle optional dependencies
+  webpack: (config, { isServer }) => {
+    // Ignore optional AWS SDK dependency from unzipper
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@aws-sdk/client-s3': false,
+    }
+    return config
+  },
   // Bundle optimization
   swcMinify: true,
   compiler: {
@@ -22,8 +31,6 @@ const nextConfig = {
   experimental: {
     // Disable CSS optimization to avoid critters dependency issue
     // optimizeCss: true,
-    // Large payload handling (configured per-route in API handlers)
-    isrMemoryCacheSize: 0, // Disable ISR cache to save memory for large uploads
   },
   // Server-side configuration
   serverRuntimeConfig: {

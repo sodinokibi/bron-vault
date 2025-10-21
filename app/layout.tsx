@@ -1,17 +1,10 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import "./globals.css"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import ClientLayoutWithSidebar from "@/components/client-layout-with-sidebar"
 import { Toaster } from "@/components/ui/toaster"
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-  fallback: ["system-ui", "arial"],
-})
 
 export const metadata: Metadata = {
   title: "broń Vault",
@@ -37,7 +30,7 @@ export default function RootLayout({
       <head>
         <link rel="icon" href="/images/favicon.png" />
       </head>
-      <body className={`${inter.className} bg-background text-foreground`}>
+      <body className="bg-background text-foreground font-sans">
         <script
           dangerouslySetInnerHTML={{
             __html: `

@@ -307,8 +307,8 @@ export async function processZipFileStreaming(
               const writeStream = createWriteStream(outputPath)
               entry.pipe(writeStream)
 
-              await new Promise((res, rej) => {
-                writeStream.on("finish", res)
+              await new Promise<void>((res, rej) => {
+                writeStream.on("finish", () => res())
                 writeStream.on("error", rej)
               })
 

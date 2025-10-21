@@ -78,7 +78,7 @@ export function detectArchiveType(filename: string, mimeType?: string): ArchiveF
   // Try to detect from MIME type if filename detection failed
   if (mimeType) {
     for (const [ext, info] of Object.entries(SUPPORTED_FORMATS)) {
-      if (info.mimeTypes.includes(mimeType)) {
+      if ((info.mimeTypes as readonly string[]).includes(mimeType)) {
         return ext as ArchiveFormat
       }
     }
@@ -372,12 +372,15 @@ async function extractRar(
         const extracted = extractor.extract()
         const { files } = extracted
 
+        // Convert generator to array to check extraction
+        const filesList = [...files]
+
         // Check if extraction was successful
-        if (files && files.length > 0) {
+        if (filesList && filesList.length > 0) {
           return {
             success: true,
             password: password || null,
-            filesExtracted: files.length,
+            filesExtracted: filesList.length,
           }
         }
       } catch (err) {
@@ -477,7 +480,7 @@ export async function isPasswordProtected(
 
           // Check if any entry is encrypted
           for (const entry of Object.values(entries)) {
-            if (entry.isEncrypted) {
+            if (entry.encrypted) {
               return true
             }
           }
