@@ -29,6 +29,13 @@ export { StealCParser } from "./stealc-parser"
 export { LummaParser } from "./lumma-parser"
 export { RedlineParser } from "./redline-parser"
 export { RaccoonParser } from "./raccoon-parser"
+export { VidarParser } from "./vidar-parser"
+export { AuroraParser } from "./aurora-parser"
+export { MetaMarsParser } from "./metamars-parser"
+export { FormBookParser } from "./formbook-parser"
+
+// SQLite parser utilities
+export * from "./sqlite-parser"
 
 // Detection system
 export {

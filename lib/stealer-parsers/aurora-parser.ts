@@ -1,21 +1,23 @@
 /**
- * Lumma Stealer Parser
+ * Aurora Stealer Parser
  *
- * Parses logs from Lumma stealer malware
+ * Parses logs from Aurora stealer malware
+ * Growing in popularity, focuses on crypto and browser data
  *
  * Typical structure:
  * - {HWID}/
- *   - user_data/
- *     - Passwords/
- *       - {browser}_passwords.txt
- *     - Cookies/
- *       - {browser}_cookies.txt
- *     - Autofills/
- *     - Cards/
+ *   - passwords/
+ *     - {browser}_passwords.txt
+ *   - cookies/
+ *     - {browser}_cookies.txt
+ *   - autofill/
+ *     - {browser}_autofill.txt
+ *   - cc/ (credit cards)
+ *   - extensions/
  *   - wallets/
  *   - files/
- *   - information.txt
- *   - screenshot.jpg
+ *   - screenshot.png
+ *   - info.txt (system info)
  */
 
 import {
@@ -30,7 +32,9 @@ import {
   type CreditCard,
   type CryptoWallet,
   type MessengerToken,
-  type GamingSession,
+  type BrowserHistory,
+  type Download,
+  type Bookmark,
 } from "./types"
 import {
   parsePasswordFile,
@@ -38,19 +42,24 @@ import {
   parseJSONCookies,
   detectBrowser,
   extractProfile,
-  extractDomain,
   extractWalletAddress,
   extractSeedPhrase,
   extractDiscordToken,
   sanitizeText,
 } from "./utils"
+import {
+  parseSQLiteCookies,
+  parseSQLiteHistory,
+  parseSQLiteDownloads,
+  parseBookmarksJSON,
+} from "./sqlite-parser"
 
-export class LummaParser implements StealerParser {
+export class AuroraParser implements StealerParser {
   getMetadata() {
     return {
-      name: "Lumma Parser",
-      family: StealerFamily.LUMMA,
-      description: "Parser for Lumma stealer logs",
+      name: "Aurora Parser",
+      family: StealerFamily.AURORA,
+      description: "Parser for Aurora stealer logs (crypto-focused)",
     }
   }
 
@@ -58,56 +67,62 @@ export class LummaParser implements StealerParser {
     let confidence = 0
     const indicators: string[] = []
 
-    // Check for typical Lumma directory structure
-    const hasUserData = files.some((f) =>
-      f.file_path.match(/user_data[\/\\]/i),
-    )
+    // Check for passwords/ directory (lowercase - specific to Aurora)
     const hasPasswordsDir = files.some((f) =>
-      f.file_path.match(/Passwords?[\/\\]/i),
+      f.file_path.match(/^[^\/\\]+[\/\\]passwords[\/\\]/i),
     )
-    const hasCookiesDir = files.some((f) =>
-      f.file_path.match(/Cookies?[\/\\]/i),
-    )
-    const hasWalletsDir = files.some((f) =>
-      f.file_path.match(/wallets?[\/\\]/i),
-    )
-    const hasInformationFile = files.some((f) =>
-      f.file_name.match(/information\.txt$/i),
-    )
-
-    if (hasUserData) {
-      confidence += 0.35
-      indicators.push("user_data directory")
-    }
 
     if (hasPasswordsDir) {
-      confidence += 0.2
-      indicators.push("Passwords directory")
+      confidence += 0.25
+      indicators.push("passwords/ directory")
     }
 
-    if (hasCookiesDir) {
-      confidence += 0.15
-      indicators.push("Cookies directory")
-    }
-
-    if (hasWalletsDir) {
-      confidence += 0.15
-      indicators.push("wallets directory")
-    }
-
-    if (hasInformationFile) {
-      confidence += 0.15
-      indicators.push("information.txt file")
-    }
-
-    // Check for browser-specific file naming (e.g., "chrome_passwords.txt")
-    const hasBrowserFiles = files.some((f) =>
-      f.file_name.match(/^(chrome|firefox|edge|opera)_/i),
+    // Check for cookies/ directory (lowercase)
+    const hasCookiesDir = files.some((f) =>
+      f.file_path.match(/^[^\/\\]+[\/\\]cookies[\/\\]/i),
     )
 
-    if (hasBrowserFiles) {
+    if (hasCookiesDir) {
+      confidence += 0.2
+      indicators.push("cookies/ directory")
+    }
+
+    // Check for autofill/ directory
+    const hasAutofillDir = files.some((f) =>
+      f.file_path.match(/^[^\/\\]+[\/\\]autofill[\/\\]/i),
+    )
+
+    if (hasAutofillDir) {
+      confidence += 0.15
+      indicators.push("autofill/ directory")
+    }
+
+    // Check for cc/ directory (credit cards - specific to Aurora)
+    const hasCCDir = files.some((f) =>
+      f.file_path.match(/^[^\/\\]+[\/\\]cc[\/\\]/i),
+    )
+
+    if (hasCCDir) {
+      confidence += 0.2
+      indicators.push("cc/ directory (Aurora-specific)")
+    }
+
+    // Check for extensions/ directory
+    const hasExtensionsDir = files.some((f) =>
+      f.file_path.match(/^[^\/\\]+[\/\\]extensions[\/\\]/i),
+    )
+
+    if (hasExtensionsDir) {
+      confidence += 0.15
+      indicators.push("extensions/ directory")
+    }
+
+    // Check for info.txt
+    const hasInfoTxt = files.some((f) => f.file_name.match(/^info\.txt$/i))
+
+    if (hasInfoTxt) {
       confidence += 0.1
-      indicators.push("Browser-specific file naming")
+      indicators.push("info.txt")
     }
 
     return {
@@ -127,13 +142,15 @@ export class LummaParser implements StealerParser {
     const credit_cards: CreditCard[] = []
     const crypto_wallets: CryptoWallet[] = []
     const messenger_tokens: MessengerToken[] = []
-    const gaming_sessions: GamingSession[] = []
+    const history: BrowserHistory[] = []
+    const downloads: Download[] = []
+    const bookmarks: Bookmark[] = []
 
-    // Parse password files
+    // Parse password files (in passwords/ directory)
     const passwordFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        (f.file_path.match(/Passwords?[\/\\]/i) ||
+        (f.file_path.match(/passwords[\/\\]/i) ||
           f.file_name.match(/_passwords?\.txt$/i)),
     )
 
@@ -144,15 +161,15 @@ export class LummaParser implements StealerParser {
       }
     }
 
-    // Parse cookies files
-    const cookieFiles = files.filter(
+    // Parse cookies - both text files and SQLite
+    const cookieTextFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        (f.file_path.match(/Cookies?[\/\\]/i) ||
-          f.file_name.match(/_cookies?\.txt$/i)),
+        f.file_path.match(/cookies[\/\\]/i) &&
+        f.file_name.match(/\.(txt|json)$/i),
     )
 
-    for (const file of cookieFiles) {
+    for (const file of cookieTextFiles) {
       if (!file.content) continue
 
       if (file.file_name.match(/\.json$/i)) {
@@ -164,11 +181,27 @@ export class LummaParser implements StealerParser {
       }
     }
 
+    // Parse SQLite cookies
+    const cookieSQLiteFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies" &&
+        f.local_file_path,
+    )
+
+    for (const file of cookieSQLiteFiles) {
+      const parsedCookies = parseSQLiteCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
     // Parse autofill files
     const autofillFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        (f.file_path.match(/Autofills?[\/\\]/i) ||
+        (f.file_path.match(/autofill[\/\\]/i) ||
           f.file_name.match(/_autofill\.txt$/i)),
     )
 
@@ -178,15 +211,10 @@ export class LummaParser implements StealerParser {
       const browser = detectBrowser(file.file_path)
       const profile = extractProfile(file.file_path)
 
-      // Parse autofill format (similar to StealC)
+      // Aurora autofill format: "Name: value"
       const lines = file.content.split("\n")
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim()
-
-        // Format: "Name: value" or "name = value"
-        const match =
-          line.match(/^(.+?):\s*(.+)$/) || line.match(/^(.+?)\s*=\s*(.+)$/)
-
+      for (const line of lines) {
+        const match = line.match(/^(.+?):\s*(.+)$/)
         if (match) {
           autofill.push({
             field_name: match[1].trim(),
@@ -199,12 +227,13 @@ export class LummaParser implements StealerParser {
       }
     }
 
-    // Parse credit card files
+    // Parse credit card files (in cc/ directory)
     const creditCardFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        (f.file_path.match(/Cards?[\/\\]/i) ||
-          f.file_name.match(/_cards?\.txt$/i)),
+        (f.file_path.match(/cc[\/\\]/i) ||
+          f.file_name.match(/_cc\.txt$/i) ||
+          f.file_name.match(/credit.*card/i)),
     )
 
     for (const file of creditCardFiles) {
@@ -213,7 +242,7 @@ export class LummaParser implements StealerParser {
       const browser = detectBrowser(file.file_path)
       const profile = extractProfile(file.file_path)
 
-      const blocks = file.content.split(/\n{2,}|[-=]{3,}\n/)
+      const blocks = file.content.split(/\n{2,}/)
 
       for (const block of blocks) {
         const lines = block.trim().split("\n")
@@ -226,10 +255,12 @@ export class LummaParser implements StealerParser {
         for (const line of lines) {
           const trimmed = line.trim()
 
-          const numberMatch = trimmed.match(/^(?:Number|Card):\s*(.+)$/i)
-          const nameMatch = trimmed.match(/^(?:Name|Holder):\s*(.+)$/i)
+          const numberMatch = trimmed.match(/^(?:Number|Card Number):\s*(.+)$/i)
+          const nameMatch = trimmed.match(
+            /^(?:Name|Cardholder|Cardholder Name):\s*(.+)$/i,
+          )
           const expMatch = trimmed.match(
-            /^(?:Exp|Expiration):\s*(\d+)[\/\-](\d+)$/i,
+            /^(?:Exp|Expiration|Exp Date):\s*(\d+)[\/\-](\d+)$/i,
           )
 
           if (numberMatch) cardNumber = numberMatch[1].trim()
@@ -237,7 +268,6 @@ export class LummaParser implements StealerParser {
           if (expMatch) {
             expMonth = Number.parseInt(expMatch[1])
             expYear = Number.parseInt(expMatch[2])
-            // Handle 2-digit year
             if (expYear < 100) expYear += 2000
           }
         }
@@ -259,7 +289,7 @@ export class LummaParser implements StealerParser {
       }
     }
 
-    // Parse wallet files
+    // Parse crypto wallets
     const walletFiles = files.filter(
       (f) =>
         !f.is_directory &&
@@ -276,12 +306,13 @@ export class LummaParser implements StealerParser {
       const seedPhrase = extractSeedPhrase(content)
 
       let walletType = "Unknown"
-      if (file.file_path.match(/MetaMask/i)) walletType = "MetaMask"
-      else if (file.file_path.match(/Exodus/i)) walletType = "Exodus"
-      else if (file.file_path.match(/Electrum/i)) walletType = "Electrum"
-      else if (file.file_path.match(/Phantom/i)) walletType = "Phantom"
-      else if (file.file_path.match(/Coinbase/i)) walletType = "Coinbase"
-      else if (file.file_path.match(/Trust/i)) walletType = "Trust Wallet"
+      if (file.file_name.match(/MetaMask/i)) walletType = "MetaMask"
+      else if (file.file_name.match(/Exodus/i)) walletType = "Exodus"
+      else if (file.file_name.match(/Electrum/i)) walletType = "Electrum"
+      else if (file.file_name.match(/Phantom/i)) walletType = "Phantom"
+      else if (file.file_name.match(/Coinbase/i)) walletType = "Coinbase"
+      else if (file.file_name.match(/Trust/i)) walletType = "Trust Wallet"
+      else if (file.file_name.match(/Atomic/i)) walletType = "Atomic"
 
       if (address || seedPhrase) {
         crypto_wallets.push({
@@ -293,11 +324,12 @@ export class LummaParser implements StealerParser {
       }
     }
 
-    // Parse browser extensions
+    // Parse browser extensions (crypto wallets)
     const extensionFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        f.file_path.match(/Extensions?[\/\\]/i) &&
+        (f.file_path.match(/extensions?[\/\\]/i) ||
+          f.file_path.match(/Local Extension Settings[\/\\]/i)) &&
         f.file_name.match(/\.json$/i),
     )
 
@@ -315,25 +347,29 @@ export class LummaParser implements StealerParser {
         let extensionType = "Unknown"
         let extensionName = data.name || "Unknown Extension"
 
-        // Identify crypto wallet extensions
-        if (
-          extensionId === "nkbihfbeogaeaoehlefnkodbefgpgknn" ||
-          file.file_path.match(/MetaMask/i)
-        ) {
-          extensionType = "MetaMask"
-          extensionName = "MetaMask"
-        } else if (
-          extensionId === "ibnejdfjmmkpcnlpebklmnkoeoihofec" ||
-          file.file_path.match(/TronLink/i)
-        ) {
-          extensionType = "TronLink"
-          extensionName = "TronLink"
-        } else if (
-          extensionId === "bfnaelmomeimhlpmgjnjophhpkkoljpa" ||
-          file.file_path.match(/Phantom/i)
-        ) {
-          extensionType = "Phantom"
-          extensionName = "Phantom"
+        // Crypto wallet detection
+        const cryptoWallets = {
+          nkbihfbeogaeaoehlefnkodbefgpgknn: { name: "MetaMask", type: "Crypto" },
+          ibnejdfjmmkpcnlpebklmnkoeoihofec: { name: "TronLink", type: "Crypto" },
+          bfnaelmomeimhlpmgjnjophhpkkoljpa: { name: "Phantom", type: "Crypto" },
+          hnfanknocfeofbddgcijnmhnfnkdnaad: {
+            name: "Coinbase Wallet",
+            type: "Crypto",
+          },
+          fhbohimaelbohpjbbldcngcnapndodjp: {
+            name: "Binance Chain",
+            type: "Crypto",
+          },
+          egjidjbpglichdcondbcbdnbeeppgdph: {
+            name: "Trust Wallet",
+            type: "Crypto",
+          },
+        }
+
+        if (cryptoWallets[extensionId as keyof typeof cryptoWallets]) {
+          const wallet = cryptoWallets[extensionId as keyof typeof cryptoWallets]
+          extensionName = wallet.name
+          extensionType = wallet.type
         } else if (data.name?.match(/authenticator/i)) {
           extensionType = "Authenticator"
         } else if (data.name?.match(/password/i)) {
@@ -375,61 +411,61 @@ export class LummaParser implements StealerParser {
       }
     }
 
-    // Parse Telegram data
+    // Parse Telegram
     const telegramFiles = files.filter((f) =>
       f.file_path.match(/Telegram/i),
     )
 
-    for (const file of telegramFiles) {
-      if (file.file_path.match(/tdata/i)) {
-        // Telegram session found
-        messenger_tokens.push({
-          messenger_type: "Telegram",
-          token: "tdata",
-          file_path: file.file_path,
-        })
-        break // Only add once per device
-      }
-    }
-
-    // Parse Steam session files
-    const steamFiles = files.filter(
-      (f) =>
-        !f.is_directory &&
-        (f.file_path.match(/Steam/i) || f.file_name.match(/ssfn/i)),
-    )
-
-    if (steamFiles.length > 0) {
-      // Look for loginusers.vdf for username
-      const loginUsersFile = files.find((f) =>
-        f.file_name.match(/loginusers\.vdf$/i),
-      )
-
-      let username: string | undefined
-      if (loginUsersFile?.content) {
-        const usernameMatch = loginUsersFile.content.match(
-          /"AccountName"\s+"(.+?)"/i,
-        )
-        if (usernameMatch) username = usernameMatch[1]
-      }
-
-      gaming_sessions.push({
-        platform: "Steam",
-        username,
-        session_token: "ssfn",
-        file_path: steamFiles[0].file_path,
+    if (telegramFiles.length > 0) {
+      messenger_tokens.push({
+        messenger_type: "Telegram",
+        token: "tdata",
+        file_path: telegramFiles[0].file_path,
       })
     }
 
-    // Extract metadata from information.txt
-    const infoFile = files.find((f) =>
-      f.file_name.match(/information\.txt$/i),
+    // Parse SQLite history
+    const historySQLiteFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "history" &&
+        f.local_file_path,
     )
+
+    for (const file of historySQLiteFiles) {
+      const parsedHistory = parseSQLiteHistory(
+        file.local_file_path!,
+        file.file_path,
+      )
+      history.push(...parsedHistory)
+
+      const parsedDownloads = parseSQLiteDownloads(
+        file.local_file_path!,
+        file.file_path,
+      )
+      downloads.push(...parsedDownloads)
+    }
+
+    // Parse bookmarks
+    const bookmarkFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "bookmarks" &&
+        f.content,
+    )
+
+    for (const file of bookmarkFiles) {
+      const parsedBookmarks = parseBookmarksJSON(file.content!, file.file_path)
+      bookmarks.push(...parsedBookmarks)
+    }
+
+    // Extract metadata from info.txt
+    const infoFile = files.find((f) => f.file_name.match(/^info\.txt$/i))
     let stealerVersion: string | undefined
     let buildId: string | undefined
 
     if (infoFile?.content) {
-      const versionMatch = infoFile.content.match(/Lumma\s+v?([\d.]+)/i)
+      const versionMatch = infoFile.content.match(/Aurora\s+v?([\d.]+)/i)
       const buildMatch = infoFile.content.match(/Build:\s*(.+)/i)
 
       if (versionMatch) stealerVersion = versionMatch[1]
@@ -440,14 +476,15 @@ export class LummaParser implements StealerParser {
 
     return {
       metadata: {
-        stealer_family: StealerFamily.LUMMA,
+        stealer_family: StealerFamily.AURORA,
         stealer_version: stealerVersion,
         build_id: buildId,
         detection_confidence: detection.confidence,
         indicators: [
-          "user_data directory structure",
-          "Passwords/Cookies/Cards directories",
-          "wallets directory",
+          "passwords/ directory",
+          "cookies/ directory",
+          "cc/ directory",
+          "extensions/ directory",
         ],
       },
       credentials,
@@ -458,10 +495,10 @@ export class LummaParser implements StealerParser {
       crypto_wallets,
       messenger_tokens,
       ftp_credentials: [],
-      gaming_sessions,
-      history: [],
-      downloads: [],
-      bookmarks: [],
+      gaming_sessions: [],
+      history,
+      downloads,
+      bookmarks,
       files,
     }
   }

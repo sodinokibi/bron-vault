@@ -14,15 +14,24 @@ import { StealCParser } from "./stealc-parser"
 import { LummaParser } from "./lumma-parser"
 import { RedlineParser } from "./redline-parser"
 import { RaccoonParser } from "./raccoon-parser"
+import { VidarParser } from "./vidar-parser"
+import { AuroraParser } from "./aurora-parser"
+import { MetaMarsParser } from "./metamars-parser"
+import { FormBookParser } from "./formbook-parser"
 
 /**
  * All available parsers
+ * Order matters - more specific parsers first
  */
 const PARSERS: StealerParser[] = [
-  new StealCParser(),
-  new LummaParser(),
-  new RedlineParser(),
-  new RaccoonParser(),
+  new RedlineParser(), // High specificity (UserInformation.txt)
+  new RaccoonParser(), // High specificity (System Info.txt)
+  new FormBookParser(), // High specificity (Grabbed_Data.txt)
+  new StealCParser(), // Medium specificity
+  new LummaParser(), // Medium specificity
+  new VidarParser(), // Medium specificity (similar to Redline)
+  new AuroraParser(), // Medium specificity
+  new MetaMarsParser(), // Medium specificity
 ]
 
 /**
@@ -172,6 +181,9 @@ async function parseGeneric(
     messenger_tokens: [],
     ftp_credentials: [],
     gaming_sessions: [],
+    history: [],
+    downloads: [],
+    bookmarks: [],
     files,
   }
 }

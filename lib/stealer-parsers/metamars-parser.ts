@@ -1,20 +1,21 @@
 /**
- * Raccoon Stealer Parser
+ * Meta/Mars Stealer Parser
  *
- * Parses logs from Raccoon stealer malware (v1 and v2)
+ * Parses logs from Meta and Mars stealer malware (Russian stealer family)
+ * Mars is based on Meta, so they share very similar structure
  *
  * Typical structure:
- * - {machineId}_country/
- *   - System Info.txt
- *   - cookies.txt
- *   - autofills.txt
- *   - passwords.txt
- *   - credit_cards.txt
+ * - {HWID}/
+ *   - Browsers/
+ *     - {browser}/
+ *       - Passwords.txt
+ *       - Cookies.txt
+ *       - Autofill.txt
+ *       - History
  *   - Wallets/
+ *   - Files/ (grabbed files from desktop)
  *   - Screenshot.jpg
- *   - {browser}/
- *     - cookies
- *     - passwords
+ *   - System Info.txt or Информация о системе.txt (Russian)
  */
 
 import {
@@ -26,9 +27,11 @@ import {
   type Cookie,
   type BrowserExtension,
   type AutofillData,
-  type CreditCard,
   type CryptoWallet,
   type MessengerToken,
+  type BrowserHistory,
+  type Download,
+  type Bookmark,
 } from "./types"
 import {
   parsePasswordFile,
@@ -36,19 +39,25 @@ import {
   parseJSONCookies,
   detectBrowser,
   extractProfile,
-  extractDomain,
   extractWalletAddress,
   extractSeedPhrase,
   extractDiscordToken,
   sanitizeText,
 } from "./utils"
+import {
+  parseSQLiteCookies,
+  parseSQLiteHistory,
+  parseSQLiteDownloads,
+  parseBookmarksJSON,
+} from "./sqlite-parser"
 
-export class RaccoonParser implements StealerParser {
+export class MetaMarsParser implements StealerParser {
   getMetadata() {
     return {
-      name: "Raccoon Parser",
-      family: StealerFamily.RACCOON,
-      description: "Parser for Raccoon stealer logs (v1 and v2)",
+      name: "Meta/Mars Parser",
+      family: StealerFamily.META, // Will detect both Meta and Mars
+      description:
+        "Parser for Meta and Mars stealer logs (Russian stealer family)",
     }
   }
 
@@ -56,51 +65,51 @@ export class RaccoonParser implements StealerParser {
     let confidence = 0
     const indicators: string[] = []
 
-    // Check for "System Info.txt" (very specific to Raccoon)
-    const hasSystemInfo = files.some((f) =>
-      f.file_name.match(/^System Info\.txt$/i),
+    // Check for System Info.txt or Russian version
+    const hasSystemInfo = files.some(
+      (f) =>
+        f.file_name.match(/^System Info\.txt$/i) ||
+        f.file_name.match(/Информация о системе/i),
     )
 
     if (hasSystemInfo) {
-      confidence += 0.4
+      confidence += 0.35
       indicators.push("System Info.txt")
     }
 
-    // Check for root-level data files (Raccoon v2 style)
-    const hasCookiesTxt = files.some(
-      (f) =>
-        f.file_name.match(/^cookies\.txt$/i) &&
-        !f.file_path.match(/[\/\\].*[\/\\]/), // Root level
-    )
-    const hasPasswordsTxt = files.some(
-      (f) =>
-        f.file_name.match(/^passwords\.txt$/i) &&
-        !f.file_path.match(/[\/\\].*[\/\\]/),
-    )
-    const hasAutofillsTxt = files.some(
-      (f) =>
-        f.file_name.match(/^autofills\.txt$/i) &&
-        !f.file_path.match(/[\/\\].*[\/\\]/),
+    // Check for Browsers directory
+    const hasBrowsersDir = files.some((f) =>
+      f.file_path.match(/Browsers?[\/\\]/i),
     )
 
-    if (hasCookiesTxt) {
+    if (hasBrowsersDir) {
       confidence += 0.2
-      indicators.push("Root-level cookies.txt")
+      indicators.push("Browsers directory")
     }
 
-    if (hasPasswordsTxt) {
+    // Check for Wallets directory
+    const hasWalletsDir = files.some((f) =>
+      f.file_path.match(/Wallets?[\/\\]/i),
+    )
+
+    if (hasWalletsDir) {
       confidence += 0.2
-      indicators.push("Root-level passwords.txt")
+      indicators.push("Wallets directory")
     }
 
-    if (hasAutofillsTxt) {
-      confidence += 0.1
-      indicators.push("Root-level autofills.txt")
+    // Check for Files directory (grabbed files - common in Meta/Mars)
+    const hasFilesDir = files.some((f) =>
+      f.file_path.match(/^[^\/\\]+[\/\\]Files?[\/\\]/i),
+    )
+
+    if (hasFilesDir) {
+      confidence += 0.15
+      indicators.push("Files directory (grabbed files)")
     }
 
-    // Check for screenshot
+    // Check for Screenshot
     const hasScreenshot = files.some((f) =>
-      f.file_name.match(/^Screenshot\.(jpg|png)$/i),
+      f.file_name.match(/Screenshot\.(jpg|png)$/i),
     )
 
     if (hasScreenshot) {
@@ -122,16 +131,19 @@ export class RaccoonParser implements StealerParser {
     const cookies: Cookie[] = []
     const extensions: BrowserExtension[] = []
     const autofill: AutofillData[] = []
-    const credit_cards: CreditCard[] = []
+    const credit_cards: any[] = []
     const crypto_wallets: CryptoWallet[] = []
     const messenger_tokens: MessengerToken[] = []
+    const history: BrowserHistory[] = []
+    const downloads: Download[] = []
+    const bookmarks: Bookmark[] = []
 
     // Parse password files
     const passwordFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        (f.file_name.match(/^passwords?\.txt$/i) ||
-          f.file_name.match(/password/i)),
+        (f.file_name.match(/Passwords?\.txt$/i) ||
+          f.file_name.match(/Logins?\.txt$/i)),
     )
 
     for (const file of passwordFiles) {
@@ -141,15 +153,15 @@ export class RaccoonParser implements StealerParser {
       }
     }
 
-    // Parse cookies files
-    const cookieFiles = files.filter(
+    // Parse cookies - both text and SQLite
+    const cookieTextFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        (f.file_name.match(/^cookies?\.txt$/i) ||
-          f.file_name.match(/^cookies?\.json$/i)),
+        (f.file_name.match(/Cookies?\.txt$/i) ||
+          f.file_name.match(/Cookies?\.json$/i)),
     )
 
-    for (const file of cookieFiles) {
+    for (const file of cookieTextFiles) {
       if (!file.content) continue
 
       if (file.file_name.match(/\.json$/i)) {
@@ -161,12 +173,25 @@ export class RaccoonParser implements StealerParser {
       }
     }
 
-    // Parse autofill files
-    const autofillFiles = files.filter(
+    // Parse SQLite cookies
+    const cookieSQLiteFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        (f.file_name.match(/^autofills?\.txt$/i) ||
-          f.file_name.match(/autofill/i)),
+        f.file_name.toLowerCase() === "cookies" &&
+        f.local_file_path,
+    )
+
+    for (const file of cookieSQLiteFiles) {
+      const parsedCookies = parseSQLiteCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
+    // Parse autofill files
+    const autofillFiles = files.filter(
+      (f) => !f.is_directory && f.file_name.match(/Autofill\.txt$/i),
     )
 
     for (const file of autofillFiles) {
@@ -175,82 +200,13 @@ export class RaccoonParser implements StealerParser {
       const browser = detectBrowser(file.file_path)
       const profile = extractProfile(file.file_path)
 
-      // Raccoon autofill format: "Name\tValue"
       const lines = file.content.split("\n")
-
       for (const line of lines) {
-        const parts = line.split("\t")
-        if (parts.length >= 2) {
+        const match = line.match(/^(.+?):\s*(.+)$/)
+        if (match) {
           autofill.push({
-            field_name: parts[0].trim(),
-            field_value: parts[1].trim(),
-            times_used: parts[2] ? Number.parseInt(parts[2]) : undefined,
-            browser,
-            profile,
-            file_path: file.file_path,
-          })
-        }
-      }
-    }
-
-    // Parse credit card files
-    const creditCardFiles = files.filter(
-      (f) =>
-        !f.is_directory &&
-        (f.file_name.match(/^credit_?cards?\.txt$/i) ||
-          f.file_name.match(/credit.*card/i)),
-    )
-
-    for (const file of creditCardFiles) {
-      if (!file.content) continue
-
-      const browser = detectBrowser(file.file_path)
-      const profile = extractProfile(file.file_path)
-
-      // Raccoon format: tab-separated or line-separated
-      const lines = file.content.split("\n")
-
-      for (const line of lines) {
-        if (!line.trim()) continue
-
-        // Try tab-separated first
-        const parts = line.split("\t")
-
-        let cardNumber = ""
-        let cardholderName = ""
-        let expMonth = 0
-        let expYear = 0
-
-        if (parts.length >= 4) {
-          // Format: Number\tName\tMonth\tYear
-          cardNumber = parts[0].trim()
-          cardholderName = parts[1].trim()
-          expMonth = Number.parseInt(parts[2])
-          expYear = Number.parseInt(parts[3])
-        } else {
-          // Try colon-separated format
-          const numberMatch = line.match(/Number:\s*(.+)/i)
-          const nameMatch = line.match(/Name:\s*(.+)/i)
-          const expMatch = line.match(/Exp:\s*(\d+)[\/\-](\d+)/i)
-
-          if (numberMatch) cardNumber = numberMatch[1].trim()
-          if (nameMatch) cardholderName = nameMatch[1].trim()
-          if (expMatch) {
-            expMonth = Number.parseInt(expMatch[1])
-            expYear = Number.parseInt(expMatch[2])
-            if (expYear < 100) expYear += 2000
-          }
-        }
-
-        if (cardNumber && cardholderName) {
-          const last4 = cardNumber.slice(-4)
-
-          credit_cards.push({
-            card_number_encrypted: "",
-            card_number_last4: last4,
-            cardholder_name: cardholderName,
-            expiration_month: expMonth,
-            expiration_year: expYear,
+            field_name: match[1].trim(),
+            field_value: match[2].trim(),
             browser,
             profile,
             file_path: file.file_path,
@@ -261,10 +217,7 @@ export class RaccoonParser implements StealerParser {
 
     // Parse wallet files
     const walletFiles = files.filter(
-      (f) =>
-        !f.is_directory &&
-        (f.file_path.match(/Wallets?[\/\\]/i) ||
-          f.file_name.match(/wallet/i)),
+      (f) => !f.is_directory && f.file_path.match(/Wallets?[\/\\]/i),
     )
 
     for (const file of walletFiles) {
@@ -276,11 +229,13 @@ export class RaccoonParser implements StealerParser {
       const seedPhrase = extractSeedPhrase(content)
 
       let walletType = "Unknown"
-      if (file.file_name.match(/Metamask/i)) walletType = "MetaMask"
+      if (file.file_name.match(/MetaMask/i)) walletType = "MetaMask"
       else if (file.file_name.match(/Exodus/i)) walletType = "Exodus"
       else if (file.file_name.match(/Electrum/i)) walletType = "Electrum"
       else if (file.file_name.match(/Ethereum/i)) walletType = "Ethereum"
       else if (file.file_name.match(/Bitcoin/i)) walletType = "Bitcoin Core"
+      else if (file.file_name.match(/Atomic/i)) walletType = "Atomic"
+      else if (file.file_name.match(/Coinomi/i)) walletType = "Coinomi"
 
       if (address || seedPhrase) {
         crypto_wallets.push({
@@ -317,6 +272,8 @@ export class RaccoonParser implements StealerParser {
         if (extensionId === "nkbihfbeogaeaoehlefnkodbefgpgknn") {
           extensionType = "MetaMask"
           extensionName = "MetaMask"
+        } else if (data.name?.match(/authenticator/i)) {
+          extensionType = "Authenticator"
         }
 
         extensions.push({
@@ -338,7 +295,7 @@ export class RaccoonParser implements StealerParser {
     const discordFiles = files.filter(
       (f) =>
         !f.is_directory &&
-        (f.file_name.match(/discord/i) || f.file_path.match(/discord/i)),
+        (f.file_path.match(/discord/i) || f.file_name.match(/discord/i)),
     )
 
     for (const file of discordFiles) {
@@ -367,18 +324,64 @@ export class RaccoonParser implements StealerParser {
       })
     }
 
+    // Parse SQLite history
+    const historySQLiteFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "history" &&
+        f.local_file_path,
+    )
+
+    for (const file of historySQLiteFiles) {
+      const parsedHistory = parseSQLiteHistory(
+        file.local_file_path!,
+        file.file_path,
+      )
+      history.push(...parsedHistory)
+
+      const parsedDownloads = parseSQLiteDownloads(
+        file.local_file_path!,
+        file.file_path,
+      )
+      downloads.push(...parsedDownloads)
+    }
+
+    // Parse bookmarks
+    const bookmarkFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "bookmarks" &&
+        f.content,
+    )
+
+    for (const file of bookmarkFiles) {
+      const parsedBookmarks = parseBookmarksJSON(file.content!, file.file_path)
+      bookmarks.push(...parsedBookmarks)
+    }
+
     // Extract metadata from System Info.txt
-    const systemInfoFile = files.find((f) =>
-      f.file_name.match(/^System Info\.txt$/i),
+    const systemInfoFile = files.find(
+      (f) =>
+        f.file_name.match(/^System Info\.txt$/i) ||
+        f.file_name.match(/Информация о системе/i),
     )
     let stealerVersion: string | undefined
     let buildId: string | undefined
+    let stealerFamily: StealerFamily = StealerFamily.META
 
     if (systemInfoFile?.content) {
-      const versionMatch = systemInfoFile.content.match(/Raccoon\s+v?([\d.]+)/i)
-      const buildMatch = systemInfoFile.content.match(/Build:\s*(.+)/i)
+      // Detect if it's Meta or Mars
+      if (systemInfoFile.content.match(/Mars/i)) {
+        stealerFamily = StealerFamily.MARS
+        const versionMatch = systemInfoFile.content.match(/Mars\s+v?([\d.]+)/i)
+        if (versionMatch) stealerVersion = versionMatch[1]
+      } else if (systemInfoFile.content.match(/Meta/i)) {
+        stealerFamily = StealerFamily.META
+        const versionMatch = systemInfoFile.content.match(/Meta\s+v?([\d.]+)/i)
+        if (versionMatch) stealerVersion = versionMatch[1]
+      }
 
-      if (versionMatch) stealerVersion = versionMatch[1]
+      const buildMatch = systemInfoFile.content.match(/Build:\s*(.+)/i)
       if (buildMatch) buildId = buildMatch[1].trim()
     }
 
@@ -386,14 +389,15 @@ export class RaccoonParser implements StealerParser {
 
     return {
       metadata: {
-        stealer_family: StealerFamily.RACCOON,
+        stealer_family: stealerFamily,
         stealer_version: stealerVersion,
         build_id: buildId,
         detection_confidence: detection.confidence,
         indicators: [
           "System Info.txt",
-          "Root-level data files",
-          "Tab-separated format",
+          "Browsers directory",
+          "Wallets directory",
+          "Files directory",
         ],
       },
       credentials,
@@ -405,9 +409,9 @@ export class RaccoonParser implements StealerParser {
       messenger_tokens,
       ftp_credentials: [],
       gaming_sessions: [],
-      history: [],
-      downloads: [],
-      bookmarks: [],
+      history,
+      downloads,
+      bookmarks,
       files,
     }
   }

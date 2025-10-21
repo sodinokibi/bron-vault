@@ -476,6 +476,9 @@ export class RedlineParser implements StealerParser {
       messenger_tokens,
       ftp_credentials,
       gaming_sessions,
+      history: [],
+      downloads: [],
+      bookmarks: [],
       files,
     }
   }

@@ -282,6 +282,9 @@ export async function processArchiveFile(
   let totalMessengerTokens = 0
   let totalFTPCredentials = 0
   let totalGamingSessions = 0
+  let totalHistory = 0
+  let totalDownloads = 0
+  let totalBookmarks = 0
   let totalDomains = new Set<string>()
   let totalUrls = new Set<string>()
 
@@ -349,8 +352,9 @@ export async function processArchiveFile(
         device_id, device_name, device_name_hash, upload_batch,
         total_files, total_credentials, total_domains, total_urls,
         total_cookies, total_extensions, total_autofill, total_credit_cards,
-        total_crypto_wallets, total_messenger_tokens, total_ftp_credentials, total_gaming_sessions
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        total_crypto_wallets, total_messenger_tokens, total_ftp_credentials, total_gaming_sessions,
+        total_history, total_downloads, total_bookmarks
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         deviceId,
         deviceName,
@@ -368,6 +372,9 @@ export async function processArchiveFile(
         parsedData.messenger_tokens.length,
         parsedData.ftp_credentials.length,
         parsedData.gaming_sessions.length,
+        parsedData.history.length,
+        parsedData.downloads.length,
+        parsedData.bookmarks.length,
       ],
     )
 
@@ -537,6 +544,63 @@ export async function processArchiveFile(
       )
     }
 
+    // Insert browser history
+    for (const historyEntry of parsedData.history) {
+      await executeQuery(
+        `INSERT INTO browser_history (device_id, url, title, visit_count, last_visit_time, browser, profile, file_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          deviceId,
+          historyEntry.url,
+          historyEntry.title || null,
+          historyEntry.visit_count,
+          historyEntry.last_visit_time,
+          historyEntry.browser,
+          historyEntry.profile || null,
+          historyEntry.file_path,
+        ],
+      )
+    }
+
+    // Insert downloads
+    for (const download of parsedData.downloads) {
+      await executeQuery(
+        `INSERT INTO downloads (device_id, url, file_path, file_name, total_bytes, start_time, end_time, state, browser, profile, source_file)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          deviceId,
+          download.url,
+          download.file_path || null,
+          download.file_name || null,
+          download.total_bytes || null,
+          download.start_time || null,
+          download.end_time || null,
+          download.state || null,
+          download.browser,
+          download.profile || null,
+          download.source_file,
+        ],
+      )
+    }
+
+    // Insert bookmarks
+    for (const bookmark of parsedData.bookmarks) {
+      await executeQuery(
+        `INSERT INTO bookmarks (device_id, url, title, date_added, folder, browser, profile, file_path)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          deviceId,
+          bookmark.url,
+          bookmark.title || null,
+          bookmark.date_added || null,
+          bookmark.folder || null,
+          bookmark.browser,
+          bookmark.profile || null,
+          bookmark.file_path,
+        ],
+      )
+    }
+
     // Insert files
     for (const file of parsedFiles) {
       await executeQuery(
@@ -555,6 +619,9 @@ export async function processArchiveFile(
     totalMessengerTokens += parsedData.messenger_tokens.length
     totalFTPCredentials += parsedData.ftp_credentials.length
     totalGamingSessions += parsedData.gaming_sessions.length
+    totalHistory += parsedData.history.length
+    totalDownloads += parsedData.downloads.length
+    totalBookmarks += parsedData.bookmarks.length
 
     parsedData.credentials.forEach((c) => {
       if (c.domain) totalDomains.add(c.domain)
@@ -591,5 +658,8 @@ export async function processArchiveFile(
     totalMessengerTokens,
     totalFTPCredentials,
     totalGamingSessions,
+    totalHistory,
+    totalDownloads,
+    totalBookmarks,
   }
 }
