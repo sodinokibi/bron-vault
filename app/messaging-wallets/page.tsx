@@ -185,16 +185,68 @@ function MessagingWalletsContent() {
     return "*".repeat(secret.length)
   }
 
+  const downloadExport = async (endpoint: string, filename: string) => {
+    try {
+      toast.info(`Preparing ${filename} export...`)
+
+      const response = await fetch(endpoint)
+
+      if (!response.ok) {
+        const error = await response.json()
+        toast.error(error.error || "Export failed")
+        return
+      }
+
+      // Create blob and download
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success(`${filename} downloaded successfully!`)
+    } catch (error) {
+      console.error("Export error:", error)
+      toast.error("Failed to export data")
+    }
+  }
+
   const validateAllTokens = async () => {
     setIsValidating(true)
+    setValidationProgress({ current: 0, total: validationStats?.unvalidated_tokens || 0 })
+
     try {
-      toast.info("Validation feature available - select a device to validate its tokens")
-      // TODO: Implement global validation or device selection
-      // For now, this would require fetching all devices and validating each
+      toast.info("Starting Discord token validation...")
+
+      const response = await fetch("/api/v1/messaging/discord/validate-all?limit=50", {
+        method: "POST",
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast.success(
+          `Validation complete: ${data.valid} valid, ${data.invalid} invalid out of ${data.validated} tokens`,
+        )
+
+        // Refresh stats
+        await fetchValidationStats()
+        await fetchGlobalStats()
+
+        setValidationProgress(null)
+      } else {
+        toast.error(data.error || "Validation failed")
+      }
     } catch (error) {
-      toast.error("Validation failed")
+      console.error("Validation error:", error)
+      toast.error("Failed to validate tokens")
     } finally {
       setIsValidating(false)
+      setValidationProgress(null)
     }
   }
 
@@ -601,19 +653,51 @@ function MessagingWalletsContent() {
                     )}
                   </Button>
                 )}
-                <Button variant="outline">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    downloadExport(
+                      "/api/v1/messaging/discord/export",
+                      `discord_tokens_${new Date().toISOString().slice(0, 10)}.txt`,
+                    )
+                  }
+                >
                   <Download className="h-4 w-4 mr-2" />
                   Export All Discord Tokens
                 </Button>
-                <Button variant="outline">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    downloadExport(
+                      "/api/v1/messaging/telegram/export",
+                      `telegram_sessions_${new Date().toISOString().slice(0, 10)}.txt`,
+                    )
+                  }
+                >
                   <Download className="h-4 w-4 mr-2" />
                   Export Telegram Sessions
                 </Button>
-                <Button variant="outline">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    downloadExport(
+                      "/api/v1/messaging/2fa/export",
+                      `2fa_secrets_${new Date().toISOString().slice(0, 10)}.txt`,
+                    )
+                  }
+                >
                   <Download className="h-4 w-4 mr-2" />
                   Export 2FA Secrets
                 </Button>
-                <Button variant="outline">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    downloadExport(
+                      "/api/v1/wallets/export/seeds",
+                      `wallet_seeds_${new Date().toISOString().slice(0, 10)}.txt`,
+                    )
+                  }
+                >
                   <Download className="h-4 w-4 mr-2" />
                   Export Wallet Seeds
                 </Button>
