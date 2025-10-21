@@ -223,4 +223,24 @@ async function createTables() {
     // Column might not exist yet or already be the right size, ignore error
     console.log("Version column update skipped (might already be correct size)")
   }
+
+  // Create API keys table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id VARCHAR(255) NOT NULL,
+      api_key VARCHAR(255) UNIQUE NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      description TEXT NULL,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME NULL,
+      expires_at DATETIME NULL,
+      permissions JSON NULL,
+      INDEX idx_api_key (api_key),
+      INDEX idx_user_id (user_id),
+      INDEX idx_is_active (is_active),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
 }
