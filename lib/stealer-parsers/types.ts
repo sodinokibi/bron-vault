@@ -18,6 +18,42 @@ export enum StealerFamily {
   UNKNOWN = "Unknown",
 }
 
+// Browser history data structure
+export interface BrowserHistory {
+  url: string
+  title?: string
+  visit_count: number
+  last_visit_time: number // Chrome WebKit timestamp
+  browser: string
+  profile?: string
+  file_path: string
+}
+
+// Download history data structure
+export interface Download {
+  url: string
+  file_path?: string
+  file_name?: string
+  total_bytes?: number
+  start_time?: number // Chrome WebKit timestamp
+  end_time?: number
+  state?: string // "complete", "interrupted", "in_progress"
+  browser: string
+  profile?: string
+  source_file: string
+}
+
+// Bookmark data structure
+export interface Bookmark {
+  url: string
+  title?: string
+  date_added?: number // Chrome WebKit timestamp
+  folder?: string // Bookmark folder path
+  browser: string
+  profile?: string
+  file_path: string
+}
+
 // Cookie data structure
 export interface Cookie {
   host_key: string
@@ -141,6 +177,9 @@ export interface ParsedStealerData {
   messenger_tokens: MessengerToken[]
   ftp_credentials: FTPCredential[]
   gaming_sessions: GamingSession[]
+  history: BrowserHistory[]
+  downloads: Download[]
+  bookmarks: Bookmark[]
   files: ParsedFile[]
 }
 
