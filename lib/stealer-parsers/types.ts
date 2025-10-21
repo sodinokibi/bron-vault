@@ -152,6 +152,10 @@ export interface Credential {
   tld: string
   username: string
   password: string
+  // Email parsing fields
+  is_email?: boolean
+  email_local_part?: string
+  email_domain?: string
   browser?: string
   file_path: string
 }

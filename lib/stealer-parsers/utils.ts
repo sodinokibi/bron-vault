@@ -13,6 +13,59 @@ import {
 } from "./types"
 
 /**
+ * Email parsing utilities
+ */
+const EMAIL_REGEX = /^([^@]+)@([^@]+\.[^@]+)$/
+
+export interface EmailInfo {
+  is_email: boolean
+  email_local_part?: string
+  email_domain?: string
+}
+
+/**
+ * Parse email address into components
+ * @param text - String that might be an email address
+ * @returns Email info with local_part and domain if valid email
+ */
+export function parseEmail(text: string): EmailInfo {
+  if (!text) {
+    return { is_email: false }
+  }
+
+  const trimmed = text.trim()
+  const match = trimmed.match(EMAIL_REGEX)
+
+  if (match) {
+    return {
+      is_email: true,
+      email_local_part: match[1],
+      email_domain: match[2].toLowerCase(),
+    }
+  }
+
+  return { is_email: false }
+}
+
+/**
+ * Check if a string is an email address
+ */
+export function isEmail(text: string): boolean {
+  return EMAIL_REGEX.test(text.trim())
+}
+
+/**
+ * Extract all email addresses from text
+ * @param text - Text to search for emails
+ * @returns Array of email addresses found
+ */
+export function extractEmails(text: string): string[] {
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g
+  const matches = text.match(emailRegex)
+  return matches ? Array.from(new Set(matches)) : []
+}
+
+/**
  * Extract domain and TLD from URL
  */
 export function extractDomain(url: string): { domain: string; tld: string } {
@@ -129,6 +182,7 @@ export function parsePasswordFile(
     // Add credential if all fields present
     if (url && username && password) {
       const { domain, tld } = extractDomain(url)
+      const emailInfo = parseEmail(username)
 
       credentials.push({
         url,
@@ -136,6 +190,7 @@ export function parsePasswordFile(
         tld,
         username,
         password,
+        ...emailInfo, // Add email parsing fields
         browser,
         file_path: filePath,
       })
@@ -346,4 +401,89 @@ export function groupFilesByProfile(files: ParsedFile[]): Map<string, ParsedFile
   }
 
   return groups
+}
+
+/**
+ * Extract emails from autofill data
+ * Looks for email-like field names and email patterns in field values
+ */
+export function extractEmailsFromAutofill(autofillData: any[]): string[] {
+  const emails = new Set<string>()
+  const emailFieldNames = /email|e-mail|mail|username|login|user/i
+
+  for (const item of autofillData) {
+    // Check if field name suggests it's an email
+    if (item.field_name && emailFieldNames.test(item.field_name)) {
+      if (item.field_value && isEmail(item.field_value)) {
+        emails.add(item.field_value.trim().toLowerCase())
+      }
+    }
+
+    // Also check field value regardless of name
+    if (item.field_value) {
+      const foundEmails = extractEmails(item.field_value)
+      foundEmails.forEach((email) => emails.add(email.toLowerCase()))
+    }
+  }
+
+  return Array.from(emails)
+}
+
+/**
+ * Extract potential email domains from cookies
+ * Returns domains that might be used for corporate/email services
+ */
+export function extractDomainsFromCookies(cookies: any[]): string[] {
+  const domains = new Set<string>()
+
+  // Email service providers
+  const emailProviders = [
+    'gmail.com', 'outlook.com', 'yahoo.com', 'hotmail.com',
+    'live.com', 'icloud.com', 'protonmail.com', 'zoho.com',
+    'aol.com', 'mail.com', 'yandex.com', 'gmx.com'
+  ]
+
+  for (const cookie of cookies) {
+    if (cookie.host_key) {
+      const domain = cookie.host_key.replace(/^\./, '').toLowerCase()
+
+      // Check if it's an email provider
+      if (emailProviders.some(provider => domain.includes(provider))) {
+        domains.add(domain)
+      }
+
+      // Check for corporate domains (has company-like structure)
+      // Skip common public domains
+      const parts = domain.split('.')
+      if (parts.length >= 2 && !domain.match(/\.(com|net|org|io|co)$/)) {
+        domains.add(domain)
+      }
+    }
+  }
+
+  return Array.from(domains)
+}
+
+/**
+ * Extract usernames that might be emails from any text field
+ */
+export function extractPotentialEmailUsernames(data: any[]): string[] {
+  const usernames = new Set<string>()
+
+  for (const item of data) {
+    // Check username field
+    if (item.username && isEmail(item.username)) {
+      usernames.add(item.username.toLowerCase())
+    }
+
+    // Check other common username fields
+    const fields = ['user', 'login', 'email', 'account']
+    for (const field of fields) {
+      if (item[field] && isEmail(item[field])) {
+        usernames.add(item[field].toLowerCase())
+      }
+    }
+  }
+
+  return Array.from(usernames)
 }

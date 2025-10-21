@@ -16,6 +16,11 @@ export const SUPPORTED_FORMATS = {
     mimeTypes: ["application/zip", "application/x-zip-compressed"],
     supportsPassword: true,
   },
+  ".rar": {
+    name: "RAR",
+    mimeTypes: ["application/x-rar-compressed", "application/vnd.rar"],
+    supportsPassword: true,
+  },
   ".tar": {
     name: "TAR",
     mimeTypes: ["application/x-tar"],
@@ -64,7 +69,7 @@ export function detectArchiveType(filename: string, mimeType?: string): ArchiveF
   }
 
   // Check single extensions
-  for (const ext of [".zip", ".tar", ".7z"]) {
+  for (const ext of [".zip", ".rar", ".tar", ".7z"]) {
     if (lowerName.endsWith(ext)) {
       return ext as ArchiveFormat
     }
@@ -307,6 +312,58 @@ async function extract7z(
 }
 
 /**
+ * Extract RAR archive (with optional password support)
+ */
+async function extractRar(
+  sourcePath: string,
+  outputDir: string,
+  passwords: string[] = [""],
+): Promise<ExtractionResult> {
+  try {
+    const { createExtractorFromFile } = await import("node-unrar-js")
+
+    for (const password of passwords) {
+      try {
+        await mkdir(outputDir, { recursive: true })
+
+        // Create extractor
+        const extractor = await createExtractorFromFile({
+          filepath: sourcePath,
+          targetPath: outputDir,
+          password: password || undefined,
+        })
+
+        // Extract all files
+        const extracted = extractor.extract()
+        const { files } = extracted
+
+        // Check if extraction was successful
+        if (files && files.length > 0) {
+          return {
+            success: true,
+            password: password || null,
+            filesExtracted: files.length,
+          }
+        }
+      } catch (err) {
+        // Try next password if this one failed
+        continue
+      }
+    }
+
+    return {
+      success: false,
+      error: "Failed to extract RAR: wrong password or corrupted archive",
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: `Failed to extract RAR: ${err instanceof Error ? err.message : "Unknown error"}`,
+    }
+  }
+}
+
+/**
  * Universal archive extractor
  */
 export async function extractArchive(
@@ -332,6 +389,9 @@ export async function extractArchive(
   switch (archiveType) {
     case ".zip":
       return await extractZip(sourcePath, outputDir, passwords)
+
+    case ".rar":
+      return await extractRar(sourcePath, outputDir, passwords)
 
     case ".tar":
       return await extractTar(sourcePath, outputDir)
@@ -395,6 +455,20 @@ export async function isPasswordProtected(
             resolve(!!err)
           })
         })
+
+      case ".rar":
+        // Try to extract with no password to test
+        try {
+          const { createExtractorFromFile } = await import("node-unrar-js")
+          const extractor = await createExtractorFromFile({
+            filepath: sourcePath,
+            targetPath: "/tmp/rar-test",
+          })
+          const { files } = extractor.extract()
+          return false // No password needed
+        } catch (err) {
+          return true // Likely password protected
+        }
 
       default:
         return false
