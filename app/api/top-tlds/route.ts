@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { executeQuery } from "@/lib/mysql"
 import { validateRequest } from "@/lib/auth"
+import { getCachedData, setCachedData } from "@/lib/cache-helper"
 
 export async function GET(request: NextRequest) {
   console.log("🔍 [TOP-TLDS] API called")
@@ -17,42 +18,13 @@ export async function GET(request: NextRequest) {
   try {
     console.log("📊 [TOP-TLDS] Loading top TLDs for user:", (user as any).username || "<unknown>")
 
-    // Check cache first
+    // Check cache first (Redis primary, MySQL fallback)
     console.log("📊 [TOP-TLDS] Checking cache...")
-    const cacheResult = (await executeQuery(
-      "SELECT cache_data FROM analytics_cache WHERE cache_key = 'top_tlds' AND expires_at > NOW()",
-    )) as any[]
+    const cached = await getCachedData<any>("top_tlds")
 
-    console.log("📊 [TOP-TLDS] Cache result length:", Array.isArray(cacheResult) ? cacheResult.length : "unexpected")
-
-    if (cacheResult.length > 0) {
+    if (cached) {
       console.log("📊 [TOP-TLDS] Using cached top TLDs")
-      let cachedDataRaw = cacheResult[0].cache_data
-      let cachedData: any = null
-
-      try {
-        if (typeof cachedDataRaw === "string") {
-          cachedData = JSON.parse(cachedDataRaw)
-        } else if (typeof cachedDataRaw === "object" && cachedDataRaw !== null) {
-          // Already an object (possibly due to previous bad write), use as-is
-          cachedData = cachedDataRaw
-        } else {
-          throw new Error("Unsupported cache_data type")
-        }
-      } catch (e) {
-        console.warn("📊 [TOP-TLDS] Failed to parse cached data, ignoring cache:", e)
-        cachedData = null
-      }
-
-      if (cachedData) {
-        console.log(
-          "📊 [TOP-TLDS] Cached data length:",
-          Array.isArray(cachedData) ? cachedData.length : "unknown",
-        )
-        return NextResponse.json(cachedData)
-      } else {
-        console.log("📊 [TOP-TLDS] Cache corrupted or invalid, will recalc")
-      }
+      return NextResponse.json(cached)
     }
 
     console.log("📊 [TOP-TLDS] Calculating fresh top TLDs...")
@@ -80,25 +52,9 @@ export async function GET(request: NextRequest) {
     )
     console.log("📊 [TOP-TLDS] Sample data:", Array.isArray(topTlds) ? (topTlds as any[]).slice(0, 2) : topTlds)
 
-    // Serialize for cache (safe fallback)
-    let serialized: string
-    try {
-      serialized = JSON.stringify(topTlds)
-    } catch (e) {
-      console.error("📊 [TOP-TLDS] Failed to serialize topTlds for cache:", e)
-      serialized = "[]" // fallback empty array
-    }
-
-    // Cache for 10 minutes (upsert)
+    // Cache for 10 minutes (Redis primary, MySQL fallback)
     console.log("📊 [TOP-TLDS] Caching results...")
-    await executeQuery(
-      `
-      INSERT INTO analytics_cache (cache_key, cache_data, expires_at)
-      VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))
-      ON DUPLICATE KEY UPDATE cache_data = VALUES(cache_data), expires_at = VALUES(expires_at)
-      `,
-      ["top_tlds", serialized],
-    )
+    await setCachedData("top_tlds", topTlds, { ttlMinutes: 10 })
 
     console.log("📊 [TOP-TLDS] Returning fresh data")
     return NextResponse.json(topTlds)

@@ -16,10 +16,30 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Parse pagination parameters
+    const { searchParams } = new URL(request.url)
+    const limit = Number.parseInt(searchParams.get("limit") || "100", 10)
+    const offset = Number.parseInt(searchParams.get("offset") || "0", 10)
+
+    // Validate pagination parameters
+    if (limit < 1 || limit > 1000) {
+      return NextResponse.json({
+        success: false,
+        error: "Limit must be between 1 and 1000"
+      }, { status: 400 })
+    }
+
+    if (offset < 0) {
+      return NextResponse.json({
+        success: false,
+        error: "Offset must be non-negative"
+      }, { status: 400 })
+    }
+
     // Query to get unique browsers per device_id
     const [results] = await pool.query<RowDataPacket[]>(`
-      SELECT DISTINCT device_id, browser 
-      FROM credentials 
+      SELECT DISTINCT device_id, browser
+      FROM credentials
       WHERE browser IS NOT NULL AND browser != ''
       ORDER BY device_id, browser
     `);
@@ -74,14 +94,21 @@ export async function GET(request: NextRequest) {
     });
 
     // Convert to array and sort by count
-    const browserAnalysis: BrowserData[] = Object.entries(browserCounts)
+    const allBrowsers: BrowserData[] = Object.entries(browserCounts)
       .map(([browser, count]) => ({ browser, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 10); // Top 10 browsers
 
-    return NextResponse.json({ 
-      success: true, 
-      browserAnalysis 
+    const total = allBrowsers.length
+
+    // Apply pagination
+    const browserAnalysis = allBrowsers.slice(offset, offset + limit)
+
+    return NextResponse.json({
+      success: true,
+      total,
+      limit,
+      offset,
+      browserAnalysis
     });
 
   } catch (error) {

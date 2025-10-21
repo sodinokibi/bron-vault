@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { executeQuery } from "@/lib/mysql"
 import { logInfo, logError } from "@/lib/logger"
 import { validateRequest } from "@/lib/auth"
+import { getCachedData, setCachedData } from "@/lib/cache-helper"
 
 export async function GET(request: NextRequest) {
   // Validate authentication
@@ -13,34 +14,12 @@ export async function GET(request: NextRequest) {
   try {
     console.log("📊 Loading stats...")
 
-    // Check cache first
-    const cacheResult = (await executeQuery(
-      "SELECT cache_data FROM analytics_cache WHERE cache_key = 'stats_main' AND expires_at > NOW()",
-    )) as any[]
+    // Check cache first (Redis primary, MySQL fallback)
+    const cached = await getCachedData<any>("stats_main")
 
-    if (cacheResult.length > 0) {
+    if (cached) {
       console.log("📊 Using cached stats")
-      let cached = cacheResult[0].cache_data
-      let parsed: any = null
-
-      try {
-        if (typeof cached === "string") {
-          parsed = JSON.parse(cached)
-        } else if (typeof cached === "object" && cached !== null) {
-          parsed = cached
-        } else {
-          throw new Error("Unsupported cached format")
-        }
-      } catch (e) {
-        console.warn("📊 Cached stats parse failed, will recalc. Error:", e)
-        parsed = null
-      }
-
-      if (parsed) {
-        return NextResponse.json(parsed)
-      } else {
-        console.log("📊 Cache corrupted or invalid, continuing to recompute stats")
-      }
+      return NextResponse.json(cached)
     }
 
     console.log("📊 Calculating fresh stats...")
@@ -156,11 +135,8 @@ export async function GET(request: NextRequest) {
 
     logInfo(`Final stats result`, result.stats, 'Stats API')
 
-    // Cache for 5 minutes
-    await executeQuery(
-      "INSERT INTO analytics_cache (cache_key, cache_data, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 5 MINUTE)) ON DUPLICATE KEY UPDATE cache_data = VALUES(cache_data), expires_at = VALUES(expires_at)",
-      ["stats_main", JSON.stringify(result)],
-    )
+    // Cache for 5 minutes (Redis primary, MySQL fallback)
+    await setCachedData("stats_main", result, { ttlMinutes: 5 })
 
     return NextResponse.json(result)
   } catch (error) {

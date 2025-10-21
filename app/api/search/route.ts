@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { executeQuery } from "@/lib/mysql"
 import { validateRequest } from "@/lib/auth"
+import { sanitizeEmail, sanitizeDomain } from "@/lib/input-sanitization"
 
 export async function POST(request: NextRequest) {
   // Validate authentication
@@ -16,7 +17,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Query and type are required" }, { status: 400 })
     }
 
-    console.log(`🔍 Searching for: "${query}" by ${type}`)
+    // Sanitize input based on type
+    let sanitizedQuery: string
+    try {
+      if (type === "email") {
+        sanitizedQuery = sanitizeEmail(query)
+      } else if (type === "domain") {
+        sanitizedQuery = sanitizeDomain(query)
+      } else {
+        return NextResponse.json({ error: "Invalid search type" }, { status: 400 })
+      }
+    } catch (sanitizeError) {
+      return NextResponse.json({
+        error: "Invalid query",
+        details: sanitizeError instanceof Error ? sanitizeError.message : "Query validation failed"
+      }, { status: 400 })
+    }
+
+    console.log(`🔍 Searching for: "${sanitizedQuery}" by ${type}`)
 
     let searchResults: any[]
 
@@ -24,7 +42,7 @@ export async function POST(request: NextRequest) {
       // Search for email in file content - look in ALL text files, not just credentials table
       searchResults = await executeQuery(
         `
-        SELECT 
+        SELECT
           d.device_id,
           d.device_name,
           d.upload_batch,
@@ -39,13 +57,13 @@ export async function POST(request: NextRequest) {
         WHERE c.username LIKE ?
         ORDER BY d.upload_date DESC, d.device_name, c.url
       `,
-        [`%${query}%`],
+        [`%${sanitizedQuery}%`],
       ) as any[]
     } else if (type === "domain") {
       // Search for domain in file content - look in ALL text files
       searchResults = await executeQuery(
         `
-        SELECT 
+        SELECT
           d.device_id,
           d.device_name,
           d.upload_batch,
@@ -60,7 +78,7 @@ export async function POST(request: NextRequest) {
         WHERE c.url LIKE ? OR c.domain LIKE ?
         ORDER BY d.upload_date DESC, d.device_name, c.url
       `,
-        [`%${query}%`, `%${query}%`],
+        [`%${sanitizedQuery}%`, `%${sanitizedQuery}%`],
       ) as any[]
     } else {
       return NextResponse.json({ error: "Invalid search type" }, { status: 400 })

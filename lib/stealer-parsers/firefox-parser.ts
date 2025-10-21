@@ -126,6 +126,47 @@ function parseFirefoxBookmarks(
   originalPath: string,
 ): Bookmark[] {
   try {
+    // First, build a folder hierarchy map
+    // Type 2 = folder in Firefox
+    const folderMap = new Map<number, string>()
+
+    try {
+      const folders = db
+        .prepare(
+          `
+        SELECT id, parent, title
+        FROM moz_bookmarks
+        WHERE type = 2 AND title IS NOT NULL
+      `
+        )
+        .all() as any[]
+
+      // Build folder paths with hierarchy
+      const buildFolderPath = (folderId: number, visited = new Set<number>()): string => {
+        if (visited.has(folderId)) {
+          return "" // Prevent infinite loops
+        }
+        visited.add(folderId)
+
+        const folder = folders.find((f) => f.id === folderId)
+        if (!folder || !folder.title) {
+          return ""
+        }
+
+        const parentPath = folder.parent ? buildFolderPath(folder.parent, visited) : ""
+        return parentPath ? `${parentPath}/${folder.title}` : folder.title
+      }
+
+      folders.forEach((folder) => {
+        const path = buildFolderPath(folder.id)
+        if (path) {
+          folderMap.set(folder.id, path)
+        }
+      })
+    } catch (folderError) {
+      console.warn("Failed to build Firefox folder hierarchy:", folderError)
+    }
+
     // Firefox bookmarks are in moz_bookmarks + moz_places
     // Type 1 = bookmark (not folder, separator, etc.)
     const rows = db
@@ -151,7 +192,7 @@ function parseFirefoxBookmarks(
       url: row.url || "",
       title: row.title || undefined,
       date_added: row.dateAdded || undefined, // Firefox uses microseconds
-      folder: undefined, // TODO: Could map parent to folder name
+      folder: row.parent ? folderMap.get(row.parent) : undefined,
       browser,
       profile,
       file_path: originalPath,

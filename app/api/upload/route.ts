@@ -54,12 +54,9 @@ function hasSpecialCharacters(password: string): boolean {
 }
 
 // Helper function to safely log password information
-function logPasswordInfo(password: string, context: string): void {
-  if (!password) return
-  
-  const hasSpecial = hasSpecialCharacters(password)
-  const length = password.length
-  
+function logPasswordInfo(length: number, hasSpecial: boolean, context: string): void {
+  if (!length) return
+
   if (hasSpecial) {
     console.log(`🔐 ${context}: Password with special characters (length: ${length})`)
   } else {
@@ -439,7 +436,7 @@ async function processZipWithBinaryStorage(
             
             // Log password info for debugging
             if (password) {
-              logPasswordInfo(password, `Password stat from ${passwordFile.path}`)
+              logPasswordInfo(password.length, hasSpecialCharacters(password), `Password stat from ${passwordFile.path}`)
             }
           }
 
@@ -456,9 +453,10 @@ async function processZipWithBinaryStorage(
           // Log any passwords with special characters for debugging
           for (const credential of stats.credentials) {
             if (credential.password) {
-              logPasswordInfo(credential.password, `Credential from ${passwordFile.path}`)
-              if (hasSpecialCharacters(credential.password)) {
-                logWithBroadcast(`🔐 Found password with special characters: ${credential.password.substring(0, 5)}...`, "info")
+              const hasSpecial = hasSpecialCharacters(credential.password)
+              logPasswordInfo(credential.password.length, hasSpecial, `Credential from ${passwordFile.path}`)
+              if (hasSpecial) {
+                logWithBroadcast(`🔐 Found password with special characters (length: ${credential.password.length})`, "info")
               }
             }
           }
@@ -523,7 +521,7 @@ async function processZipWithBinaryStorage(
           }
           
           // Log password info for debugging
-          logPasswordInfo(credential.password, `Saving credential for ${credential.url}`)
+          logPasswordInfo(credential.password.length, hasSpecialCharacters(credential.password), `Saving credential for ${credential.url}`)
           
           await executeQuery(
             `INSERT INTO credentials (device_id, url, domain, tld, username, password, browser, file_path) 
@@ -562,7 +560,7 @@ async function processZipWithBinaryStorage(
           }
           
           // Log password info for debugging
-          logPasswordInfo(password, `Saving password stat (count: ${count})`)
+          logPasswordInfo(password.length, hasSpecialCharacters(password), `Saving password stat (count: ${count})`)
           
           await executeQuery(`INSERT INTO password_stats (device_id, password, count) VALUES (?, ?, ?)`, [
             deviceId,
