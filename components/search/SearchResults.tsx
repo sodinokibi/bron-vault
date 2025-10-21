@@ -1,9 +1,11 @@
 "use client"
 
 import React from "react"
-import { Copy } from "lucide-react"
+import Link from "next/link"
+import { Copy, ExternalLink } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { LoadingState, LoadingTable } from "@/components/ui/loading"
 
 interface SearchResult {
@@ -105,9 +107,13 @@ export function SearchResults({ searchResults, searchQuery, onDeviceSelect }: Se
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-2">
-                          <h3 className="font-semibold text-lg text-bron-text-primary">
+                          <Link
+                            href={`/devices/${result.deviceId}`}
+                            className="font-semibold text-lg text-bron-text-primary hover:text-bron-accent-blue hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {result.deviceName}
-                          </h3>
+                          </Link>
                           {devices.length > 1 && (
                             <Badge
                               variant="secondary"
@@ -159,6 +165,15 @@ export function SearchResults({ searchResults, searchQuery, onDeviceSelect }: Se
                         >
                           {result.totalFiles.toLocaleString()} files
                         </Badge>
+                        <Link
+                          href={`/devices/${result.deviceId}`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Button variant="outline" size="sm">
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            View Device
+                          </Button>
+                        </Link>
                       </div>
                     </div>
                   </CardContent>

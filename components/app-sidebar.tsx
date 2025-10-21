@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Upload, BarChart3, Bug, MessageCircle, Cookie } from "lucide-react"
+import { Search, Upload, BarChart3, Bug, MessageCircle, Cookie, Laptop } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -27,6 +27,11 @@ const menuItems = [
     title: "Dashboard",
     url: "/dashboard",
     icon: BarChart3,
+  },
+  {
+    title: "Devices",
+    url: "/devices",
+    icon: Laptop,
   },
   {
     title: "Messaging & Wallets",

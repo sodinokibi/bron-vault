@@ -88,6 +88,10 @@ export default function DeviceDetailPage() {
   const [device, setDevice] = useState<DeviceDetails | null>(null)
   const [credentials, setCredentials] = useState<Credential[]>([])
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
+  const [sessions, setSessions] = useState<any[]>([])
+  const [bookmarks, setBookmarks] = useState<any[]>([])
+  const [downloads, setDownloads] = useState<any[]>([])
+  const [files, setFiles] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
 
@@ -100,15 +104,31 @@ export default function DeviceDetailPage() {
   const fetchDeviceDetails = async () => {
     setLoading(true)
     try {
-      const [deviceRes, credentialsRes, timelineRes] = await Promise.all([
+      const [
+        deviceRes,
+        credentialsRes,
+        timelineRes,
+        sessionsRes,
+        bookmarksRes,
+        downloadsRes,
+        filesRes
+      ] = await Promise.all([
         fetch(`/api/v1/devices/${deviceId}`),
         fetch(`/api/v1/devices/${deviceId}/credentials?limit=100`),
-        fetch(`/api/v1/devices/${deviceId}/timeline`)
+        fetch(`/api/v1/devices/${deviceId}/timeline`),
+        fetch(`/api/v1/cookie-sessions/${deviceId}`),
+        fetch(`/api/v1/devices/${deviceId}/bookmarks?limit=100`),
+        fetch(`/api/v1/devices/${deviceId}/downloads?limit=100`),
+        fetch(`/api/v1/devices/${deviceId}/files`)
       ])
 
       const deviceData = await deviceRes.json()
       const credentialsData = await credentialsRes.json()
       const timelineData = await timelineRes.json()
+      const sessionsData = await sessionsRes.json()
+      const bookmarksData = await bookmarksRes.json()
+      const downloadsData = await downloadsRes.json()
+      const filesData = await filesRes.json()
 
       if (deviceData.success) {
         setDevice(deviceData.device)
@@ -122,6 +142,22 @@ export default function DeviceDetailPage() {
 
       if (timelineData.success) {
         setTimeline(timelineData.timeline)
+      }
+
+      if (sessionsData.success) {
+        setSessions(sessionsData.sessions || [])
+      }
+
+      if (bookmarksData.success) {
+        setBookmarks(bookmarksData.bookmarks || [])
+      }
+
+      if (downloadsData.success) {
+        setDownloads(downloadsData.downloads || [])
+      }
+
+      if (filesData.success) {
+        setFiles(filesData.files || [])
       }
     } catch (error) {
       console.error("Error fetching device details:", error)
@@ -276,6 +312,15 @@ export default function DeviceDetailPage() {
           <TabsTrigger value="sessions">
             Sessions ({device.counts.cookie_sessions})
           </TabsTrigger>
+          <TabsTrigger value="bookmarks">
+            Bookmarks ({device.counts.bookmarks})
+          </TabsTrigger>
+          <TabsTrigger value="downloads">
+            Downloads ({device.counts.downloads})
+          </TabsTrigger>
+          <TabsTrigger value="files">
+            Files ({device.counts.files})
+          </TabsTrigger>
           <TabsTrigger value="messaging">
             Messaging ({device.counts.discord_tokens + device.counts.telegram_sessions})
           </TabsTrigger>
@@ -424,9 +469,246 @@ export default function DeviceDetailPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-bron-text-muted text-center py-8">
-                Cookie sessions data will be loaded here
-              </p>
+              <ScrollArea className="h-[600px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-bron-border hover:bg-bron-bg-tertiary">
+                      <TableHead className="text-bron-text-muted">Service</TableHead>
+                      <TableHead className="text-bron-text-muted">Category</TableHead>
+                      <TableHead className="text-bron-text-muted">Account</TableHead>
+                      <TableHead className="text-bron-text-muted">Browser</TableHead>
+                      <TableHead className="text-bron-text-muted">Status</TableHead>
+                      <TableHead className="text-bron-text-muted">Expires</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sessions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-bron-text-muted py-8">
+                          No cookie sessions found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      sessions.map((session: any, index: number) => (
+                        <TableRow
+                          key={index}
+                          className="border-bron-border hover:bg-bron-bg-tertiary"
+                        >
+                          <TableCell className="font-medium text-bron-text-primary">
+                            {session.service}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="capitalize">
+                              {session.service_category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-bron-text-primary max-w-[200px] truncate">
+                            {session.account_identifier || "—"}
+                          </TableCell>
+                          <TableCell className="text-bron-text-muted">
+                            {session.browser || "—"}
+                          </TableCell>
+                          <TableCell>
+                            {session.session_valid ? (
+                              <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
+                                Valid
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-red-500/10 text-red-500 border-red-500/20">
+                                Expired
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-bron-text-muted">
+                            {session.expires_at ? new Date(session.expires_at).toLocaleDateString() : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Bookmarks Tab */}
+        <TabsContent value="bookmarks">
+          <Card className="bg-bron-bg-secondary border-bron-border">
+            <CardHeader>
+              <CardTitle className="text-bron-text-primary">Browser Bookmarks</CardTitle>
+              <CardDescription className="text-bron-text-muted">
+                {device.counts.bookmarks} bookmarks found
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[600px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-bron-border hover:bg-bron-bg-tertiary">
+                      <TableHead className="text-bron-text-muted">Title</TableHead>
+                      <TableHead className="text-bron-text-muted">URL</TableHead>
+                      <TableHead className="text-bron-text-muted">Folder</TableHead>
+                      <TableHead className="text-bron-text-muted">Browser</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {bookmarks.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-bron-text-muted py-8">
+                          No bookmarks found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      bookmarks.map((bookmark: any, index: number) => (
+                        <TableRow
+                          key={index}
+                          className="border-bron-border hover:bg-bron-bg-tertiary"
+                        >
+                          <TableCell className="font-medium text-bron-text-primary">
+                            {bookmark.title || "Untitled"}
+                          </TableCell>
+                          <TableCell className="text-bron-text-primary max-w-[300px] truncate">
+                            {bookmark.url}
+                          </TableCell>
+                          <TableCell className="text-bron-text-muted">
+                            {bookmark.folder || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-bron-bg-tertiary">
+                              {bookmark.browser}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Downloads Tab */}
+        <TabsContent value="downloads">
+          <Card className="bg-bron-bg-secondary border-bron-border">
+            <CardHeader>
+              <CardTitle className="text-bron-text-primary">Browser Downloads</CardTitle>
+              <CardDescription className="text-bron-text-muted">
+                {device.counts.downloads} downloads found
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[600px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-bron-border hover:bg-bron-bg-tertiary">
+                      <TableHead className="text-bron-text-muted">File Path</TableHead>
+                      <TableHead className="text-bron-text-muted">Source URL</TableHead>
+                      <TableHead className="text-bron-text-muted">Browser</TableHead>
+                      <TableHead className="text-bron-text-muted">Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {downloads.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-bron-text-muted py-8">
+                          No downloads found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      downloads.map((download: any, index: number) => (
+                        <TableRow
+                          key={index}
+                          className="border-bron-border hover:bg-bron-bg-tertiary"
+                        >
+                          <TableCell className="font-medium text-bron-text-primary">
+                            {download.file_path}
+                          </TableCell>
+                          <TableCell className="text-bron-text-primary max-w-[300px] truncate">
+                            {download.download_url || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-bron-bg-tertiary">
+                              {download.browser}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-bron-text-muted">
+                            {download.start_time ? new Date(download.start_time).toLocaleString() : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Files Tab */}
+        <TabsContent value="files">
+          <Card className="bg-bron-bg-secondary border-bron-border">
+            <CardHeader>
+              <CardTitle className="text-bron-text-primary">File Tree</CardTitle>
+              <CardDescription className="text-bron-text-muted">
+                {device.counts.files} files and {device.counts.directories} directories
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[600px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-bron-border hover:bg-bron-bg-tertiary">
+                      <TableHead className="text-bron-text-muted">Path</TableHead>
+                      <TableHead className="text-bron-text-muted">Type</TableHead>
+                      <TableHead className="text-bron-text-muted">Size</TableHead>
+                      <TableHead className="text-bron-text-muted">Has Content</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {files.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-bron-text-muted py-8">
+                          No files found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      files.map((file: any, index: number) => (
+                        <TableRow
+                          key={index}
+                          className="border-bron-border hover:bg-bron-bg-tertiary"
+                        >
+                          <TableCell className="font-mono text-sm text-bron-text-primary max-w-[400px] truncate">
+                            {file.file_path}
+                          </TableCell>
+                          <TableCell>
+                            {file.is_directory ? (
+                              <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                                Directory
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-gray-500/10 text-gray-500 border-gray-500/20">
+                                File
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-bron-text-muted">
+                            {file.file_size ? `${(file.file_size / 1024).toFixed(2)} KB` : "—"}
+                          </TableCell>
+                          <TableCell>
+                            {file.has_content ? (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <span className="text-bron-text-muted">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
