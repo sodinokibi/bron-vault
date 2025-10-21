@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Upload, BarChart3, Bug, MessageCircle } from "lucide-react"
+import { Search, Upload, BarChart3, Bug, MessageCircle, Cookie } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -32,6 +32,11 @@ const menuItems = [
     title: "Messaging & Wallets",
     url: "/messaging-wallets",
     icon: MessageCircle,
+  },
+  {
+    title: "Cookie Sessions",
+    url: "/cookie-sessions",
+    icon: Cookie,
   },
   {
     title: "Search",
