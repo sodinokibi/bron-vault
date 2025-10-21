@@ -49,6 +49,14 @@ import {
   parseBookmarksJSON,
   isSQLiteDatabase,
 } from "./sqlite-parser"
+import {
+  parseFirefoxPlaces,
+  parseFirefoxCookies,
+  parseFirefoxFormHistory,
+  parseFirefoxLogins,
+  parseFirefoxExtensions,
+  isFirefoxDatabase,
+} from "./firefox-parser"
 
 export class VidarParser implements StealerParser {
   getMetadata() {
@@ -148,6 +156,19 @@ export class VidarParser implements StealerParser {
       }
     }
 
+    // Parse Firefox logins.json
+    const firefoxLoginsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "logins.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxLoginsFiles) {
+      const parsedCreds = parseFirefoxLogins(file.content!, file.file_path)
+      credentials.push(...parsedCreds)
+    }
+
     // Parse cookies - both text files and SQLite databases
     const cookieTextFiles = files.filter(
       (f) =>
@@ -168,7 +189,7 @@ export class VidarParser implements StealerParser {
       }
     }
 
-    // Parse SQLite cookie databases
+    // Parse SQLite cookie databases (Chrome/Chromium)
     const cookieSQLiteFiles = files.filter(
       (f) =>
         !f.is_directory &&
@@ -184,7 +205,23 @@ export class VidarParser implements StealerParser {
       cookies.push(...parsedCookies)
     }
 
-    // Parse SQLite history databases
+    // Parse Firefox cookies.sqlite
+    const firefoxCookieFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxCookieFiles) {
+      const parsedCookies = parseFirefoxCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
+    // Parse SQLite history databases (Chrome/Chromium)
     const historySQLiteFiles = files.filter(
       (f) =>
         !f.is_directory &&
@@ -207,7 +244,22 @@ export class VidarParser implements StealerParser {
       downloads.push(...parsedDownloads)
     }
 
-    // Parse bookmarks
+    // Parse Firefox places.sqlite (history, bookmarks, downloads all in one!)
+    const firefoxPlacesFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "places.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxPlacesFiles) {
+      const parsed = parseFirefoxPlaces(file.local_file_path!, file.file_path)
+      history.push(...parsed.history)
+      bookmarks.push(...parsed.bookmarks)
+      downloads.push(...parsed.downloads)
+    }
+
+    // Parse Chrome/Chromium bookmarks
     const bookmarkFiles = files.filter(
       (f) =>
         !f.is_directory &&
@@ -220,7 +272,7 @@ export class VidarParser implements StealerParser {
       bookmarks.push(...parsedBookmarks)
     }
 
-    // Parse autofill files
+    // Parse autofill text files
     const autofillFiles = files.filter(
       (f) => !f.is_directory && f.file_name.match(/Autofill\.txt$/i),
     )
@@ -244,6 +296,22 @@ export class VidarParser implements StealerParser {
           })
         }
       }
+    }
+
+    // Parse Firefox formhistory.sqlite
+    const firefoxFormHistoryFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "formhistory.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxFormHistoryFiles) {
+      const parsedAutofill = parseFirefoxFormHistory(
+        file.local_file_path!,
+        file.file_path,
+      )
+      autofill.push(...parsedAutofill)
     }
 
     // Parse wallet files
@@ -319,6 +387,22 @@ export class VidarParser implements StealerParser {
       } catch {
         continue
       }
+    }
+
+    // Parse Firefox extensions.json
+    const firefoxExtensionsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "extensions.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxExtensionsFiles) {
+      const parsedExtensions = parseFirefoxExtensions(
+        file.content!,
+        file.file_path,
+      )
+      extensions.push(...parsedExtensions)
     }
 
     // Extract metadata from Information.txt

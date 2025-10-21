@@ -36,6 +36,9 @@ import {
   type MessengerToken,
   type FTPCredential,
   type GamingSession,
+  type BrowserHistory,
+  type Download,
+  type Bookmark,
 } from "./types"
 import {
   parsePasswordFile,
@@ -49,6 +52,21 @@ import {
   extractDiscordToken,
   sanitizeText,
 } from "./utils"
+import {
+  parseSQLiteCookies,
+  parseSQLiteHistory,
+  parseSQLiteDownloads,
+  parseBookmarksJSON,
+  isSQLiteDatabase,
+} from "./sqlite-parser"
+import {
+  parseFirefoxPlaces,
+  parseFirefoxCookies,
+  parseFirefoxFormHistory,
+  parseFirefoxLogins,
+  parseFirefoxExtensions,
+  isFirefoxDatabase,
+} from "./firefox-parser"
 
 export class RedlineParser implements StealerParser {
   getMetadata() {
@@ -136,6 +154,9 @@ export class RedlineParser implements StealerParser {
     const messenger_tokens: MessengerToken[] = []
     const ftp_credentials: FTPCredential[] = []
     const gaming_sessions: GamingSession[] = []
+    const history: BrowserHistory[] = []
+    const downloads: Download[] = []
+    const bookmarks: Bookmark[] = []
 
     // Parse password files (in Browsers/Passwords/)
     const passwordFiles = files.filter(
@@ -149,6 +170,19 @@ export class RedlineParser implements StealerParser {
         const creds = parsePasswordFile(file.content, file.file_path)
         credentials.push(...creds)
       }
+    }
+
+    // Parse Firefox logins.json
+    const firefoxLoginsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "logins.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxLoginsFiles) {
+      const parsedCreds = parseFirefoxLogins(file.content!, file.file_path)
+      credentials.push(...parsedCreds)
     }
 
     // Parse cookies files (in Browsers/Cookies/)
@@ -167,6 +201,38 @@ export class RedlineParser implements StealerParser {
         const parsedCookies = parseNetscapeCookies(file.content, file.file_path)
         cookies.push(...parsedCookies)
       }
+    }
+
+    // Parse SQLite cookie databases (Chrome/Chromium)
+    const cookieSQLiteFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies" &&
+        f.local_file_path,
+    )
+
+    for (const file of cookieSQLiteFiles) {
+      const parsedCookies = parseSQLiteCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
+    // Parse Firefox cookies.sqlite
+    const firefoxCookieFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxCookieFiles) {
+      const parsedCookies = parseFirefoxCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
     }
 
     // Parse autofill files (in Browsers/Autofills/)
@@ -195,6 +261,22 @@ export class RedlineParser implements StealerParser {
           })
         }
       }
+    }
+
+    // Parse Firefox formhistory.sqlite
+    const firefoxFormHistoryFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "formhistory.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxFormHistoryFiles) {
+      const parsedAutofill = parseFirefoxFormHistory(
+        file.local_file_path!,
+        file.file_path,
+      )
+      autofill.push(...parsedAutofill)
     }
 
     // Parse credit card files (in Browsers/CreditCards/)
@@ -437,6 +519,73 @@ export class RedlineParser implements StealerParser {
       }
     }
 
+    // Parse Firefox extensions.json
+    const firefoxExtensionsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "extensions.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxExtensionsFiles) {
+      const parsedExtensions = parseFirefoxExtensions(
+        file.content!,
+        file.file_path,
+      )
+      extensions.push(...parsedExtensions)
+    }
+
+    // Parse SQLite history databases (Chrome/Chromium)
+    const historySQLiteFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "history" &&
+        f.local_file_path,
+    )
+
+    for (const file of historySQLiteFiles) {
+      const parsedHistory = parseSQLiteHistory(
+        file.local_file_path!,
+        file.file_path,
+      )
+      history.push(...parsedHistory)
+
+      // Downloads are in the same History database
+      const parsedDownloads = parseSQLiteDownloads(
+        file.local_file_path!,
+        file.file_path,
+      )
+      downloads.push(...parsedDownloads)
+    }
+
+    // Parse Firefox places.sqlite (history, bookmarks, downloads all in one!)
+    const firefoxPlacesFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "places.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxPlacesFiles) {
+      const parsed = parseFirefoxPlaces(file.local_file_path!, file.file_path)
+      history.push(...parsed.history)
+      bookmarks.push(...parsed.bookmarks)
+      downloads.push(...parsed.downloads)
+    }
+
+    // Parse Chrome/Chromium bookmarks
+    const bookmarkFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "bookmarks" &&
+        f.content,
+    )
+
+    for (const file of bookmarkFiles) {
+      const parsedBookmarks = parseBookmarksJSON(file.content!, file.file_path)
+      bookmarks.push(...parsedBookmarks)
+    }
+
     // Extract metadata from UserInformation.txt
     const userInfoFile = files.find((f) =>
       f.file_name.match(/^UserInformation\.txt$/i),
@@ -476,9 +625,9 @@ export class RedlineParser implements StealerParser {
       messenger_tokens,
       ftp_credentials,
       gaming_sessions,
-      history: [],
-      downloads: [],
-      bookmarks: [],
+      history,
+      downloads,
+      bookmarks,
       files,
     }
   }

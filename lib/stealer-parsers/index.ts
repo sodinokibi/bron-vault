@@ -37,6 +37,9 @@ export { FormBookParser } from "./formbook-parser"
 // SQLite parser utilities
 export * from "./sqlite-parser"
 
+// Firefox parser utilities
+export * from "./firefox-parser"
+
 // Detection system
 export {
   detectStealerType,

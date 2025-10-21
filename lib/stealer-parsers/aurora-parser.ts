@@ -53,6 +53,14 @@ import {
   parseSQLiteDownloads,
   parseBookmarksJSON,
 } from "./sqlite-parser"
+import {
+  parseFirefoxPlaces,
+  parseFirefoxCookies,
+  parseFirefoxFormHistory,
+  parseFirefoxLogins,
+  parseFirefoxExtensions,
+  isFirefoxDatabase,
+} from "./firefox-parser"
 
 export class AuroraParser implements StealerParser {
   getMetadata() {
@@ -161,6 +169,19 @@ export class AuroraParser implements StealerParser {
       }
     }
 
+    // Parse Firefox logins.json
+    const firefoxLoginsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "logins.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxLoginsFiles) {
+      const parsedCreds = parseFirefoxLogins(file.content!, file.file_path)
+      credentials.push(...parsedCreds)
+    }
+
     // Parse cookies - both text files and SQLite
     const cookieTextFiles = files.filter(
       (f) =>
@@ -197,6 +218,22 @@ export class AuroraParser implements StealerParser {
       cookies.push(...parsedCookies)
     }
 
+    // Parse Firefox cookies.sqlite
+    const firefoxCookieFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxCookieFiles) {
+      const parsedCookies = parseFirefoxCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
     // Parse autofill files
     const autofillFiles = files.filter(
       (f) =>
@@ -225,6 +262,22 @@ export class AuroraParser implements StealerParser {
           })
         }
       }
+    }
+
+    // Parse Firefox formhistory.sqlite
+    const firefoxFormHistoryFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "formhistory.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxFormHistoryFiles) {
+      const parsedAutofill = parseFirefoxFormHistory(
+        file.local_file_path!,
+        file.file_path,
+      )
+      autofill.push(...parsedAutofill)
     }
 
     // Parse credit card files (in cc/ directory)
@@ -391,6 +444,22 @@ export class AuroraParser implements StealerParser {
       }
     }
 
+    // Parse Firefox extensions.json
+    const firefoxExtensionsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "extensions.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxExtensionsFiles) {
+      const parsedExtensions = parseFirefoxExtensions(
+        file.content!,
+        file.file_path,
+      )
+      extensions.push(...parsedExtensions)
+    }
+
     // Parse Discord tokens
     const discordFiles = files.filter(
       (f) =>
@@ -457,6 +526,21 @@ export class AuroraParser implements StealerParser {
     for (const file of bookmarkFiles) {
       const parsedBookmarks = parseBookmarksJSON(file.content!, file.file_path)
       bookmarks.push(...parsedBookmarks)
+    }
+
+    // Parse Firefox places.sqlite (history, bookmarks, downloads all in one!)
+    const firefoxPlacesFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "places.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxPlacesFiles) {
+      const parsed = parseFirefoxPlaces(file.local_file_path!, file.file_path)
+      history.push(...parsed.history)
+      bookmarks.push(...parsed.bookmarks)
+      downloads.push(...parsed.downloads)
     }
 
     // Extract metadata from info.txt
