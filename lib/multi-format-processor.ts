@@ -5,6 +5,7 @@ import crypto from "crypto"
 import { executeQuery } from "./mysql"
 import { extractArchive, detectArchiveType, type ArchiveFormat } from "./archive-handler"
 import { parseStealerLogs, type ParsedFile } from "./stealer-parsers"
+import { parseAndStoreMessagingWalletData } from "./parse-messaging-wallet"
 
 // Password escape function
 function escapePassword(password: string): string {
@@ -346,6 +347,21 @@ export async function processArchiveFile(
       `✅ Detected: ${parsedData.metadata.stealer_family} (${(parsedData.metadata.detection_confidence * 100).toFixed(0)}% confidence)`,
     )
 
+    // Parse Discord, Telegram, 2FA, and Crypto Wallet data
+    await progressCallback(deviceProgress + 3, `💎 Parsing messaging & wallet data...`)
+    const messagingWalletCounts = await parseAndStoreMessagingWalletData(
+      deviceId,
+      extractionDir,
+      async (subProgress, message) => {
+        // Sub-progress for messaging/wallet parsing (don't update main progress too much)
+        await progressCallback(deviceProgress + 3, message)
+      },
+    )
+
+    console.log(
+      `💎 Messaging & Wallet Summary: Discord:${messagingWalletCounts.discord_tokens} Telegram:${messagingWalletCounts.telegram_sessions} 2FA:${messagingWalletCounts.authenticator_data} Wallets:${messagingWalletCounts.crypto_wallets}`,
+    )
+
     // Insert device with all statistics
     await executeQuery(
       `INSERT INTO devices (
@@ -616,7 +632,11 @@ export async function processArchiveFile(
     totalAutofill += parsedData.autofill.length
     totalCreditCards += parsedData.credit_cards.length
     totalCryptoWallets += parsedData.crypto_wallets.length
+    totalCryptoWallets += messagingWalletCounts.crypto_wallets // From new wallet parser
     totalMessengerTokens += parsedData.messenger_tokens.length
+    totalMessengerTokens += messagingWalletCounts.discord_tokens // Discord tokens
+    totalMessengerTokens += messagingWalletCounts.telegram_sessions // Telegram sessions
+    totalMessengerTokens += messagingWalletCounts.authenticator_data // 2FA data
     totalFTPCredentials += parsedData.ftp_credentials.length
     totalGamingSessions += parsedData.gaming_sessions.length
     totalHistory += parsedData.history.length
