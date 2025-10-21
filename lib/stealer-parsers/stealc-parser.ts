@@ -28,6 +28,9 @@ import {
   type AutofillData,
   type CreditCard,
   type CryptoWallet,
+  type BrowserHistory,
+  type Download,
+  type Bookmark,
 } from "./types"
 import {
   parsePasswordFile,
@@ -42,6 +45,19 @@ import {
   extractSeedPhrase,
   sanitizeText,
 } from "./utils"
+import {
+  parseSQLiteCookies,
+  parseSQLiteHistory,
+  parseSQLiteDownloads,
+  parseBookmarksJSON,
+} from "./sqlite-parser"
+import {
+  parseFirefoxPlaces,
+  parseFirefoxCookies,
+  parseFirefoxFormHistory,
+  parseFirefoxLogins,
+  parseFirefoxExtensions,
+} from "./firefox-parser"
 
 export class StealCParser implements StealerParser {
   getMetadata() {
@@ -121,6 +137,9 @@ export class StealCParser implements StealerParser {
     const autofill: AutofillData[] = []
     const credit_cards: CreditCard[] = []
     const crypto_wallets: CryptoWallet[] = []
+    const history: BrowserHistory[] = []
+    const downloads: Download[] = []
+    const bookmarks: Bookmark[] = []
 
     // Parse password files
     const passwordFiles = files.filter(
@@ -243,6 +262,67 @@ export class StealCParser implements StealerParser {
       }
     }
 
+    // Parse Firefox logins.json
+    const firefoxLoginsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "logins.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxLoginsFiles) {
+      const parsedCreds = parseFirefoxLogins(file.content!, file.file_path)
+      credentials.push(...parsedCreds)
+    }
+
+    // Parse SQLite cookie databases (Chrome/Chromium)
+    const cookieSQLiteFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies" &&
+        f.local_file_path,
+    )
+
+    for (const file of cookieSQLiteFiles) {
+      const parsedCookies = parseSQLiteCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
+    // Parse Firefox cookies.sqlite
+    const firefoxCookieFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxCookieFiles) {
+      const parsedCookies = parseFirefoxCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
+    // Parse Firefox formhistory.sqlite
+    const firefoxFormHistoryFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "formhistory.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxFormHistoryFiles) {
+      const parsedAutofill = parseFirefoxFormHistory(
+        file.local_file_path!,
+        file.file_path,
+      )
+      autofill.push(...parsedAutofill)
+    }
+
     // Parse wallet files
     const walletFiles = files.filter(
       (f) =>
@@ -332,6 +412,72 @@ export class StealCParser implements StealerParser {
       }
     }
 
+    // Parse Firefox extensions.json
+    const firefoxExtensionsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "extensions.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxExtensionsFiles) {
+      const parsedExtensions = parseFirefoxExtensions(
+        file.content!,
+        file.file_path,
+      )
+      extensions.push(...parsedExtensions)
+    }
+
+    // Parse SQLite history databases (Chrome/Chromium)
+    const historySQLiteFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "history" &&
+        f.local_file_path,
+    )
+
+    for (const file of historySQLiteFiles) {
+      const parsedHistory = parseSQLiteHistory(
+        file.local_file_path!,
+        file.file_path,
+      )
+      history.push(...parsedHistory)
+
+      const parsedDownloads = parseSQLiteDownloads(
+        file.local_file_path!,
+        file.file_path,
+      )
+      downloads.push(...parsedDownloads)
+    }
+
+    // Parse Firefox places.sqlite (history, bookmarks, downloads all in one!)
+    const firefoxPlacesFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "places.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxPlacesFiles) {
+      const parsed = parseFirefoxPlaces(file.local_file_path!, file.file_path)
+      history.push(...parsed.history)
+      bookmarks.push(...parsed.bookmarks)
+      downloads.push(...parsed.downloads)
+    }
+
+    // Parse Chrome/Chromium bookmarks
+    const bookmarkFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "bookmarks" &&
+        f.content,
+    )
+
+    for (const file of bookmarkFiles) {
+      const parsedBookmarks = parseBookmarksJSON(file.content!, file.file_path)
+      bookmarks.push(...parsedBookmarks)
+    }
+
     // Determine version and build ID from Information.txt if present
     const infoFile = files.find((f) =>
       f.file_name.match(/Information\.txt$/i),
@@ -370,9 +516,9 @@ export class StealCParser implements StealerParser {
       messenger_tokens: [],
       ftp_credentials: [],
       gaming_sessions: [],
-      history: [],
-      downloads: [],
-      bookmarks: [],
+      history,
+      downloads,
+      bookmarks,
       files,
     }
   }

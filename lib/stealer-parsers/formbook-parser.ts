@@ -28,6 +28,8 @@ import {
   detectBrowser,
   extractProfile,
 } from "./utils"
+import { parseSQLiteCookies } from "./sqlite-parser"
+import { parseFirefoxCookies, parseFirefoxLogins } from "./firefox-parser"
 
 export class FormBookParser implements StealerParser {
   getMetadata() {
@@ -166,6 +168,51 @@ export class FormBookParser implements StealerParser {
         const parsedCookies = parseNetscapeCookies(file.content, file.file_path)
         cookies.push(...parsedCookies)
       }
+    }
+
+    // Parse SQLite cookies
+    const cookieSQLiteFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies" &&
+        f.local_file_path,
+    )
+
+    for (const file of cookieSQLiteFiles) {
+      const parsedCookies = parseSQLiteCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
+    // Parse Firefox cookies.sqlite
+    const firefoxCookieFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "cookies.sqlite" &&
+        f.local_file_path,
+    )
+
+    for (const file of firefoxCookieFiles) {
+      const parsedCookies = parseFirefoxCookies(
+        file.local_file_path!,
+        file.file_path,
+      )
+      cookies.push(...parsedCookies)
+    }
+
+    // Parse Firefox logins.json
+    const firefoxLoginsFiles = files.filter(
+      (f) =>
+        !f.is_directory &&
+        f.file_name.toLowerCase() === "logins.json" &&
+        f.content,
+    )
+
+    for (const file of firefoxLoginsFiles) {
+      const parsedCreds = parseFirefoxLogins(file.content!, file.file_path)
+      credentials.push(...parsedCreds)
     }
 
     // Extract metadata from System_Info.txt
