@@ -9,6 +9,7 @@ import { broadcastLogToSession, closeLogSession } from "@/lib/upload-connections
 import { processSoftwareFiles } from "@/lib/software-parser"
 import { validateRequest } from "@/lib/auth"
 import { queueUploadJob } from "@/lib/upload-queue"
+import { detectArchiveType, getSupportedExtensionsDisplay } from "@/lib/archive-handler"
 
 // Route segment config for large file support
 export const runtime = "nodejs"
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData()
   const sessionId = (formData.get("sessionId") as string) || "default"
   const useAsync = formData.get("async") === "true" // Check if async processing is requested
+  const password = (formData.get("password") as string) || null // Optional archive password
 
   // Helper function for logging with broadcast
   const logWithBroadcast = (message: string, type: "info" | "success" | "warning" | "error" = "info") => {
@@ -99,11 +101,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 })
     }
 
-    if (!file.name.toLowerCase().endsWith(".zip")) {
-      return NextResponse.json({ error: "Only .zip files are allowed" }, { status: 400 })
+    // Detect archive type
+    const archiveType = detectArchiveType(file.name, file.type)
+
+    if (!archiveType) {
+      return NextResponse.json(
+        {
+          error: `Unsupported file format. Supported formats: ${getSupportedExtensionsDisplay()}`,
+        },
+        { status: 400 },
+      )
     }
 
-    logWithBroadcast("📦 File received: " + file.name + " Size: " + file.size, "info")
+    logWithBroadcast(`📦 File received: ${file.name} (${archiveType}) - Size: ${file.size}`, "info")
+
+    if (password) {
+      logWithBroadcast("🔐 Password provided for encrypted archive", "info")
+    }
 
     // For large files (>100MB) or if async requested, use job queue
     const fileSizeThreshold = 100 * 1024 * 1024 // 100MB
@@ -133,6 +147,8 @@ export async function POST(request: NextRequest) {
         filename: file.name,
         uploadBatch,
         sessionId,
+        password,
+        archiveType,
       })
 
       logWithBroadcast(`✅ Upload queued successfully. Job ID: ${jobId}`, "success")

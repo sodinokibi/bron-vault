@@ -5,6 +5,7 @@ import path from "path"
 import crypto from "crypto"
 import { validateRequest } from "@/lib/auth"
 import { queueUploadJob } from "@/lib/upload-queue"
+import { detectArchiveType } from "@/lib/archive-handler"
 
 // Route segment config for large file uploads
 export const runtime = "nodejs"
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
     const totalChunks = parseInt(request.headers.get("X-Total-Chunks") || "1")
     const filename = request.headers.get("X-Filename") || "upload.zip"
     const chunkHash = request.headers.get("X-Chunk-Hash") || null // Optional: for integrity check
+    const password = request.headers.get("X-Archive-Password") || null // Optional: archive password
 
     // Validate inputs
     if (!uploadId) {
@@ -119,6 +121,13 @@ export async function POST(request: NextRequest) {
 
       console.log(`🧹 Cleaned up ${chunkFiles.length} chunk files`)
 
+      // Detect archive type
+      const archiveType = detectArchiveType(filename)
+
+      if (!archiveType) {
+        return NextResponse.json({ error: "Unsupported archive format" }, { status: 400 })
+      }
+
       // Queue for processing
       const uploadBatch = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
       const jobId = await queueUploadJob({
@@ -127,6 +136,8 @@ export async function POST(request: NextRequest) {
         username: user.username,
         filename,
         uploadBatch,
+        password,
+        archiveType,
       })
 
       console.log(`📋 Queued upload job: ${jobId}`)

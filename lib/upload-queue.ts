@@ -1,7 +1,8 @@
 import { Queue, Worker, Job } from "bullmq"
 import { getRedisConnection } from "./redis"
 import { executeQuery } from "./mysql"
-import { processZipFileStreaming } from "./streaming-processor"
+import { processArchiveFile } from "./multi-format-processor"
+import { detectArchiveType, type ArchiveFormat } from "./archive-handler"
 
 // Job data interface
 export interface UploadJobData {
@@ -11,6 +12,8 @@ export interface UploadJobData {
   filename: string
   uploadBatch: string
   sessionId?: string
+  password?: string | null
+  archiveType?: ArchiveFormat
 }
 
 // Job result interface
@@ -100,7 +103,7 @@ export function startUploadWorker() {
   uploadWorker = new Worker<UploadJobData, UploadJobResult>(
     "uploads",
     async (job: Job<UploadJobData, UploadJobResult>) => {
-      const { filePath, userId, username, filename, uploadBatch, sessionId } = job.data
+      const { filePath, userId, username, filename, uploadBatch, sessionId, password, archiveType } = job.data
 
       console.log(`🚀 Processing upload job ${job.id}: ${filename}`)
 
@@ -108,11 +111,26 @@ export function startUploadWorker() {
         // Update progress
         await job.updateProgress(5)
 
-        // Process the ZIP file with streaming
-        const result = await processZipFileStreaming(filePath, uploadBatch, async (progress, message) => {
-          await job.updateProgress(progress)
-          console.log(`[Job ${job.id}] Progress ${progress}%: ${message}`)
-        })
+        // Detect archive type if not provided
+        const detectedType = archiveType || detectArchiveType(filename)
+
+        if (!detectedType) {
+          throw new Error(`Unsupported archive format: ${filename}`)
+        }
+
+        console.log(`📦 Archive type: ${detectedType}`)
+
+        // Process the archive file
+        const result = await processArchiveFile(
+          filePath,
+          detectedType,
+          uploadBatch,
+          password || null,
+          async (progress, message) => {
+            await job.updateProgress(progress)
+            console.log(`[Job ${job.id}] Progress ${progress}%: ${message}`)
+          },
+        )
 
         await job.updateProgress(100)
 
