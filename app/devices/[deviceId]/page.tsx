@@ -1,0 +1,523 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
+import {
+  ArrowLeft,
+  Calendar,
+  HardDrive,
+  Shield,
+  AlertTriangle,
+  CheckCircle,
+  FileText,
+  Key,
+  Cookie,
+  Globe,
+  Download,
+  MessageCircle,
+  Wallet,
+  Package,
+  Clock,
+  Laptop
+} from "lucide-react"
+import { toast } from "sonner"
+
+interface DeviceDetails {
+  device_id: string
+  device_name: string
+  upload_date: string
+  upload_batch: string
+  total_credentials: number
+  total_domains: number
+  total_urls: number
+  total_files: number
+  stealer_info: {
+    stealer_family: string
+    confidence: number
+    detection_method: string
+  } | null
+  counts: {
+    files: number
+    directories: number
+    credentials: number
+    cookies: number
+    browser_history: number
+    bookmarks: number
+    downloads: number
+    discord_tokens: number
+    telegram_sessions: number
+    two_fa_codes: number
+    crypto_wallets: number
+    cookie_sessions: number
+    high_value_sessions: number
+    software: number
+  }
+}
+
+interface Credential {
+  id: number
+  url: string
+  domain: string
+  username: string
+  password: string
+  browser: string
+  file_path: string
+}
+
+interface TimelineEvent {
+  timestamp: string
+  event_type: string
+  category: string
+  description: string
+  metadata?: any
+  icon?: string
+  color?: string
+}
+
+export default function DeviceDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const deviceId = params.deviceId as string
+
+  const [device, setDevice] = useState<DeviceDetails | null>(null)
+  const [credentials, setCredentials] = useState<Credential[]>([])
+  const [timeline, setTimeline] = useState<TimelineEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState("overview")
+
+  useEffect(() => {
+    if (deviceId) {
+      fetchDeviceDetails()
+    }
+  }, [deviceId])
+
+  const fetchDeviceDetails = async () => {
+    setLoading(true)
+    try {
+      const [deviceRes, credentialsRes, timelineRes] = await Promise.all([
+        fetch(`/api/v1/devices/${deviceId}`),
+        fetch(`/api/v1/devices/${deviceId}/credentials?limit=100`),
+        fetch(`/api/v1/devices/${deviceId}/timeline`)
+      ])
+
+      const deviceData = await deviceRes.json()
+      const credentialsData = await credentialsRes.json()
+      const timelineData = await timelineRes.json()
+
+      if (deviceData.success) {
+        setDevice(deviceData.device)
+      } else {
+        toast.error("Failed to load device details")
+      }
+
+      if (credentialsData.success) {
+        setCredentials(credentialsData.credentials)
+      }
+
+      if (timelineData.success) {
+        setTimeline(timelineData.timeline)
+      }
+    } catch (error) {
+      console.error("Error fetching device details:", error)
+      toast.error("Error loading device details")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString()
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center h-96">
+          <div className="text-bron-text-muted">Loading device details...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!device) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <AlertTriangle className="h-12 w-12 text-bron-accent-red mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-bron-text-primary mb-2">Device Not Found</h2>
+            <p className="text-bron-text-muted mb-4">The requested device could not be found.</p>
+            <Button onClick={() => router.push("/dashboard")}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const totalItems =
+    device.counts.credentials +
+    device.counts.cookies +
+    device.counts.discord_tokens +
+    device.counts.telegram_sessions +
+    device.counts.two_fa_codes +
+    device.counts.crypto_wallets
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => router.push("/dashboard")}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-bron-text-primary flex items-center gap-2">
+              <Laptop className="h-8 w-8 text-bron-accent-blue" />
+              {device.device_name}
+            </h1>
+            <p className="text-bron-text-muted mt-1">
+              Device ID: {device.device_id}
+            </p>
+          </div>
+        </div>
+        {device.stealer_info && (
+          <Badge
+            variant="outline"
+            className="bg-bron-accent-red/10 text-bron-accent-red border-bron-accent-red/20"
+          >
+            <Shield className="h-3 w-3 mr-1" />
+            {device.stealer_info.stealer_family} ({device.stealer_info.confidence}% confidence)
+          </Badge>
+        )}
+      </div>
+
+      {/* Stats Overview */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="bg-bron-bg-secondary border-bron-border">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-bron-text-muted">
+              Total Items
+            </CardTitle>
+            <Package className="h-4 w-4 text-bron-text-muted" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-bron-text-primary">{totalItems}</div>
+            <p className="text-xs text-bron-text-muted">Extracted data points</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-bron-bg-secondary border-bron-border">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-bron-text-muted">
+              Credentials
+            </CardTitle>
+            <Key className="h-4 w-4 text-bron-text-muted" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-bron-text-primary">
+              {device.counts.credentials}
+            </div>
+            <p className="text-xs text-bron-text-muted">{device.total_domains} unique domains</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-bron-bg-secondary border-bron-border">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-bron-text-muted">
+              High-Value Sessions
+            </CardTitle>
+            <AlertTriangle className="h-4 w-4 text-bron-accent-yellow" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-bron-text-primary">
+              {device.counts.high_value_sessions}
+            </div>
+            <p className="text-xs text-bron-text-muted">
+              {device.counts.cookie_sessions} total sessions
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-bron-bg-secondary border-bron-border">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-bron-text-muted">
+              Files
+            </CardTitle>
+            <FileText className="h-4 w-4 text-bron-text-muted" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-bron-text-primary">
+              {device.counts.files}
+            </div>
+            <p className="text-xs text-bron-text-muted">
+              {device.counts.directories} directories
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="bg-bron-bg-secondary border-bron-border">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="credentials">
+            Credentials ({device.counts.credentials})
+          </TabsTrigger>
+          <TabsTrigger value="sessions">
+            Sessions ({device.counts.cookie_sessions})
+          </TabsTrigger>
+          <TabsTrigger value="messaging">
+            Messaging ({device.counts.discord_tokens + device.counts.telegram_sessions})
+          </TabsTrigger>
+          <TabsTrigger value="timeline">Timeline ({timeline.length})</TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="bg-bron-bg-secondary border-bron-border">
+              <CardHeader>
+                <CardTitle className="text-bron-text-primary flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Device Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-bron-text-muted">Upload Date:</span>
+                  <span className="text-bron-text-primary">{formatDate(device.upload_date)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-bron-text-muted">Upload Batch:</span>
+                  <span className="text-bron-text-primary">{device.upload_batch}</span>
+                </div>
+                {device.stealer_info && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-bron-text-muted">Stealer Family:</span>
+                      <span className="text-bron-text-primary">
+                        {device.stealer_info.stealer_family}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-bron-text-muted">Detection Method:</span>
+                      <span className="text-bron-text-primary">
+                        {device.stealer_info.detection_method}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-bron-bg-secondary border-bron-border">
+              <CardHeader>
+                <CardTitle className="text-bron-text-primary flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Data Breakdown
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-bron-text-muted">Browser History:</span>
+                  <Badge variant="secondary">{device.counts.browser_history}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-bron-text-muted">Bookmarks:</span>
+                  <Badge variant="secondary">{device.counts.bookmarks}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-bron-text-muted">Downloads:</span>
+                  <Badge variant="secondary">{device.counts.downloads}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-bron-text-muted">Cookies:</span>
+                  <Badge variant="secondary">{device.counts.cookies}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-bron-text-muted">Crypto Wallets:</span>
+                  <Badge variant="secondary">{device.counts.crypto_wallets}</Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-bron-text-muted">Software:</span>
+                  <Badge variant="secondary">{device.counts.software}</Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Credentials Tab */}
+        <TabsContent value="credentials">
+          <Card className="bg-bron-bg-secondary border-bron-border">
+            <CardHeader>
+              <CardTitle className="text-bron-text-primary">Saved Credentials</CardTitle>
+              <CardDescription className="text-bron-text-muted">
+                {device.counts.credentials} credentials from this device
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[600px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-bron-border hover:bg-bron-bg-tertiary">
+                      <TableHead className="text-bron-text-muted">URL</TableHead>
+                      <TableHead className="text-bron-text-muted">Username</TableHead>
+                      <TableHead className="text-bron-text-muted">Password</TableHead>
+                      <TableHead className="text-bron-text-muted">Browser</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {credentials.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-bron-text-muted py-8">
+                          No credentials found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      credentials.map((cred) => (
+                        <TableRow
+                          key={cred.id}
+                          className="border-bron-border hover:bg-bron-bg-tertiary"
+                        >
+                          <TableCell className="text-bron-text-primary max-w-[300px] truncate">
+                            {cred.url}
+                          </TableCell>
+                          <TableCell className="text-bron-text-primary">
+                            {cred.username}
+                          </TableCell>
+                          <TableCell className="text-bron-text-primary font-mono text-xs">
+                            {cred.password.substring(0, 3)}***
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-bron-bg-tertiary">
+                              {cred.browser}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Sessions Tab */}
+        <TabsContent value="sessions">
+          <Card className="bg-bron-bg-secondary border-bron-border">
+            <CardHeader>
+              <CardTitle className="text-bron-text-primary">Cookie Sessions</CardTitle>
+              <CardDescription className="text-bron-text-muted">
+                {device.counts.cookie_sessions} detected sessions
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-bron-text-muted text-center py-8">
+                Cookie sessions data will be loaded here
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Messaging Tab */}
+        <TabsContent value="messaging">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="bg-bron-bg-secondary border-bron-border">
+              <CardHeader>
+                <CardTitle className="text-bron-text-primary text-sm">Discord</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-bron-text-primary">
+                  {device.counts.discord_tokens}
+                </div>
+                <p className="text-xs text-bron-text-muted">tokens found</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-bron-bg-secondary border-bron-border">
+              <CardHeader>
+                <CardTitle className="text-bron-text-primary text-sm">Telegram</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-bron-text-primary">
+                  {device.counts.telegram_sessions}
+                </div>
+                <p className="text-xs text-bron-text-muted">sessions found</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-bron-bg-secondary border-bron-border">
+              <CardHeader>
+                <CardTitle className="text-bron-text-primary text-sm">2FA Codes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-bron-text-primary">
+                  {device.counts.two_fa_codes}
+                </div>
+                <p className="text-xs text-bron-text-muted">codes found</p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Timeline Tab */}
+        <TabsContent value="timeline">
+          <Card className="bg-bron-bg-secondary border-bron-border">
+            <CardHeader>
+              <CardTitle className="text-bron-text-primary flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Device Timeline
+              </CardTitle>
+              <CardDescription className="text-bron-text-muted">
+                {timeline.length} events recorded
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[600px]">
+                <div className="space-y-4">
+                  {timeline.map((event, index) => (
+                    <div key={index} className="flex gap-4 pb-4 border-b border-bron-border last:border-0">
+                      <div className="text-xs text-bron-text-muted min-w-[140px]">
+                        {formatDate(event.timestamp)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge
+                            variant="outline"
+                            className={`
+                              ${event.color === "blue" ? "bg-blue-500/10 text-blue-500 border-blue-500/20" : ""}
+                              ${event.color === "purple" ? "bg-purple-500/10 text-purple-500 border-purple-500/20" : ""}
+                              ${event.color === "green" ? "bg-green-500/10 text-green-500 border-green-500/20" : ""}
+                              ${event.color === "red" ? "bg-red-500/10 text-red-500 border-red-500/20" : ""}
+                              ${event.color === "yellow" ? "bg-yellow-500/10 text-yellow-500 border-yellow-500/20" : ""}
+                              ${event.color === "gray" ? "bg-gray-500/10 text-gray-500 border-gray-500/20" : ""}
+                            `}
+                          >
+                            {event.category}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-bron-text-primary">{event.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
