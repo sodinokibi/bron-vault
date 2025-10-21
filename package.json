@@ -8,7 +8,8 @@
     "lint": "next lint",
     "start": "next start",
     "worker": "tsx worker.ts",
-    "worker:dev": "tsx watch worker.ts"
+    "worker:dev": "tsx watch worker.ts",
+    "export:hashcat": "tsx scripts/export-for-hashcat.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

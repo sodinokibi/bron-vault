@@ -1,4 +1,4 @@
-import { mkdir } from "fs/promises"
+import { mkdir, readFile } from "fs/promises"
 import { createReadStream, createWriteStream, existsSync } from "fs"
 import path from "path"
 import { extract as tarExtract } from "tar"
@@ -140,6 +140,41 @@ export const COMMON_ARCHIVE_PASSWORDS = [
   "admin",
   "root",
 ]
+
+/**
+ * Load additional passwords from config file
+ * Combines config file passwords with built-in common passwords
+ */
+export async function loadArchivePasswords(): Promise<string[]> {
+  const configPath = path.join(__dirname, "../config/archive-passwords.txt")
+
+  // Start with empty password attempt
+  const passwords: string[] = [""]
+
+  // Try to load from config file
+  if (existsSync(configPath)) {
+    try {
+      const content = await readFile(configPath, "utf-8")
+      const configPasswords = content
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#")) // Filter comments and empty lines
+
+      passwords.push(...configPasswords)
+    } catch (err) {
+      console.warn(`⚠️ Could not load config file: ${configPath}`)
+    }
+  }
+
+  // Add built-in common passwords that aren't already in the list
+  for (const password of COMMON_ARCHIVE_PASSWORDS) {
+    if (!passwords.includes(password)) {
+      passwords.push(password)
+    }
+  }
+
+  return passwords
+}
 
 /**
  * Result from extraction attempt
@@ -373,11 +408,17 @@ export async function extractArchive(
   customPasswords: string[] = [],
 ): Promise<ExtractionResult> {
   // Prepare password list
-  const passwords = customPasswords.length > 0 ? customPasswords : [""]
+  let passwords: string[] = []
 
-  // If format supports password and no custom passwords provided, use common passwords
-  if (supportsPassword(archiveType) && customPasswords.length === 0) {
-    passwords.push(...COMMON_ARCHIVE_PASSWORDS)
+  if (customPasswords.length > 0) {
+    // Use custom passwords if provided
+    passwords = customPasswords
+  } else if (supportsPassword(archiveType)) {
+    // Load passwords from config file + built-in passwords
+    passwords = await loadArchivePasswords()
+  } else {
+    // No password support needed
+    passwords = [""]
   }
 
   console.log(`📦 Extracting ${archiveType} archive: ${sourcePath}`)
