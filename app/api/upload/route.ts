@@ -8,6 +8,11 @@ import JSZip from "jszip"
 import { broadcastLogToSession, closeLogSession } from "@/lib/upload-connections"
 import { processSoftwareFiles } from "@/lib/software-parser"
 import { validateRequest } from "@/lib/auth"
+import { queueUploadJob } from "@/lib/upload-queue"
+
+// Route segment config for large file support
+export const runtime = "nodejs"
+export const maxDuration = 300 // 5 minutes max
 
 // Password escape/unescape functions for handling special characters
 function escapePassword(password: string): string {
@@ -70,6 +75,7 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData()
   const sessionId = (formData.get("sessionId") as string) || "default"
+  const useAsync = formData.get("async") === "true" // Check if async processing is requested
 
   // Helper function for logging with broadcast
   const logWithBroadcast = (message: string, type: "info" | "success" | "warning" | "error" = "info") => {
@@ -82,7 +88,7 @@ export async function POST(request: NextRequest) {
   // Small delay to ensure log stream connection is established
   await new Promise(resolve => setTimeout(resolve, 200))
 
-  logWithBroadcast("🚀 Upload API called", "info")
+  logWithBroadcast("🚀 Upload API called" + (useAsync ? " (async mode)" : " (sync mode)"), "info")
 
   try {
     await initializeDatabase()
@@ -98,6 +104,53 @@ export async function POST(request: NextRequest) {
     }
 
     logWithBroadcast("📦 File received: " + file.name + " Size: " + file.size, "info")
+
+    // For large files (>100MB) or if async requested, use job queue
+    const fileSizeThreshold = 100 * 1024 * 1024 // 100MB
+    const shouldUseAsync = useAsync || file.size > fileSizeThreshold
+
+    if (shouldUseAsync) {
+      logWithBroadcast("📋 Queuing upload for background processing...", "info")
+
+      // Create uploads directory if it doesn't exist
+      const uploadsDir = path.join(process.cwd(), "uploads")
+      if (!existsSync(uploadsDir)) {
+        await mkdir(uploadsDir, { recursive: true })
+      }
+
+      // Save uploaded file temporarily
+      const bytes = await file.arrayBuffer()
+      const buffer = new Uint8Array(bytes)
+      const uploadBatch = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
+      uploadedFilePath = path.join(uploadsDir, `${uploadBatch}_${file.name}`)
+      await writeFile(uploadedFilePath, buffer)
+
+      // Queue the job
+      const jobId = await queueUploadJob({
+        filePath: uploadedFilePath,
+        userId: user.userId,
+        username: user.username,
+        filename: file.name,
+        uploadBatch,
+        sessionId,
+      })
+
+      logWithBroadcast(`✅ Upload queued successfully. Job ID: ${jobId}`, "success")
+
+      // Close log session after a delay
+      setTimeout(() => closeLogSession(sessionId), 2000)
+
+      return NextResponse.json({
+        success: true,
+        async: true,
+        jobId,
+        message: "Upload queued for processing",
+        statusUrl: `/api/v1/jobs/${jobId}`,
+      })
+    }
+
+    // Continue with synchronous processing for small files
+    logWithBroadcast("📦 Processing upload synchronously...", "info")
 
     // Create uploads directory if it doesn't exist
     const uploadsDir = path.join(process.cwd(), "uploads")
