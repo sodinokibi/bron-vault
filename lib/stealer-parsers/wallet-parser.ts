@@ -9,7 +9,14 @@
 
 import { readFileSync, readdirSync, statSync, existsSync } from "fs"
 import path from "path"
+import { createHash } from "crypto"
 import { parseLevelDBExtension, getUniqueValues } from "../leveldb-parser"
+import {
+  parseDerivationPath,
+  identifyWalletSoftware,
+  detectSharedSeed,
+  type DerivedAddress
+} from "../hd-wallet-analyzer"
 
 /**
  * Crypto wallet data interface
@@ -31,6 +38,11 @@ export interface CryptoWallet {
   network_config?: any
   vault_data?: any
   extension_id?: string
+  // HD Wallet fields
+  derivation_path?: string
+  seed_id?: string // Hash of seed phrase to group derived addresses
+  address_index?: number
+  wallet_software?: string // Detected wallet software (MetaMask, Phantom, etc.)
 }
 
 /**
@@ -145,6 +157,124 @@ function detectBlockchain(address: string): string | undefined {
   }
 
   return undefined
+}
+
+/**
+ * Generate seed ID from seed phrase (SHA256 hash)
+ * Used to group addresses derived from the same seed
+ */
+function generateSeedId(seedPhrase: string): string {
+  const normalized = seedPhrase.toLowerCase().trim().replace(/\s+/g, ' ')
+  return createHash('sha256').update(normalized).digest('hex').substring(0, 16)
+}
+
+/**
+ * Extract derivation path from wallet data (vault, network config, etc.)
+ * Returns derivation path if found, null otherwise
+ */
+function extractDerivationPath(walletData: any): string | null {
+  if (!walletData || typeof walletData !== 'object') return null
+
+  // Check for derivationPath in various formats
+  const searchKeys = ['derivationPath', 'derivation_path', 'path', 'hdPath', 'hd_path']
+
+  for (const key of searchKeys) {
+    if (walletData[key] && typeof walletData[key] === 'string') {
+      const path = walletData[key]
+      // Validate it looks like a derivation path (m/44'/60'/0'/0/0)
+      if (/^m\/\d+['\/]\d+['\/]\d+['\/]\d+['\/]?\d+['\/]?$/.test(path)) {
+        return path
+      }
+    }
+  }
+
+  // Recursively search nested objects
+  for (const value of Object.values(walletData)) {
+    if (typeof value === 'object' && value !== null) {
+      const found = extractDerivationPath(value)
+      if (found) return found
+    }
+  }
+
+  return null
+}
+
+/**
+ * Detect HD wallet information for a wallet entry
+ */
+function detectHDWalletInfo(wallet: CryptoWallet): {
+  derivation_path?: string
+  seed_id?: string
+  address_index?: number
+  wallet_software?: string
+} {
+  const result: any = {}
+
+  // Generate seed_id if we have a seed phrase
+  if (wallet.seed_phrase) {
+    result.seed_id = generateSeedId(wallet.seed_phrase)
+  } else if (wallet.mnemonic) {
+    result.seed_id = generateSeedId(wallet.mnemonic)
+  }
+
+  // Extract derivation path from vault data or network config
+  if (wallet.vault_data) {
+    const path = extractDerivationPath(wallet.vault_data)
+    if (path) {
+      result.derivation_path = path
+
+      // Parse the path to extract address index
+      const parsed = parseDerivationPath(path)
+      if (parsed) {
+        result.address_index = parsed.addressIndex
+
+        // Identify wallet software based on path pattern
+        const software = identifyWalletSoftware([path])
+        if (software.length > 0) {
+          result.wallet_software = software[0].name
+        }
+      }
+    }
+  }
+
+  // Also check network_config
+  if (wallet.network_config && !result.derivation_path) {
+    const path = extractDerivationPath(wallet.network_config)
+    if (path) {
+      result.derivation_path = path
+
+      const parsed = parseDerivationPath(path)
+      if (parsed) {
+        result.address_index = parsed.addressIndex
+
+        const software = identifyWalletSoftware([path])
+        if (software.length > 0) {
+          result.wallet_software = software[0].name
+        }
+      }
+    }
+  }
+
+  // If we don't have derivation path but have wallet_name, try to infer wallet software
+  if (!result.wallet_software && wallet.wallet_name) {
+    // Direct mapping from wallet name
+    const walletNameLower = wallet.wallet_name.toLowerCase()
+    if (walletNameLower.includes('metamask')) {
+      result.wallet_software = 'MetaMask'
+    } else if (walletNameLower.includes('phantom')) {
+      result.wallet_software = 'Phantom'
+    } else if (walletNameLower.includes('trust')) {
+      result.wallet_software = 'Trust Wallet'
+    } else if (walletNameLower.includes('coinbase')) {
+      result.wallet_software = 'Coinbase Wallet'
+    } else if (walletNameLower.includes('ledger')) {
+      result.wallet_software = 'Ledger Live'
+    } else if (walletNameLower.includes('exodus')) {
+      result.wallet_software = 'Exodus'
+    }
+  }
+
+  return result
 }
 
 /**
@@ -274,6 +404,29 @@ export function parseBrowserWalletExtensions(browserDataPath: string): CryptoWal
     console.error("❌ Error parsing browser wallet extensions:", err)
   }
 
+  // Post-process: Enrich wallets with HD wallet information
+  console.log("🔍 Detecting HD wallet information...")
+  for (const wallet of wallets) {
+    const hdInfo = detectHDWalletInfo(wallet)
+    Object.assign(wallet, hdInfo)
+  }
+
+  // Detect shared seeds by grouping wallets with same seed_id
+  const walletsWithSeeds = wallets.filter(w => w.seed_id)
+  if (walletsWithSeeds.length > 0) {
+    const seedGroups = new Map<string, number>()
+    for (const wallet of walletsWithSeeds) {
+      const count = seedGroups.get(wallet.seed_id!) || 0
+      seedGroups.set(wallet.seed_id!, count + 1)
+    }
+
+    for (const [seedId, count] of seedGroups.entries()) {
+      if (count > 1) {
+        console.log(`🔗 Found ${count} addresses sharing seed ${seedId.substring(0, 8)}...`)
+      }
+    }
+  }
+
   return wallets
 }
 
@@ -296,6 +449,12 @@ export function parseDesktopWallets(rootPath: string): CryptoWallet[] {
         // Can't access directory
       }
     }
+  }
+
+  // Post-process: Enrich wallets with HD wallet information
+  for (const wallet of wallets) {
+    const hdInfo = detectHDWalletInfo(wallet)
+    Object.assign(wallet, hdInfo)
   }
 
   return wallets
@@ -378,13 +537,22 @@ function extractWalletData(
   if (seedMatches) {
     for (const seed of seedMatches) {
       if (isBIP39SeedPhrase(seed)) {
-        wallets.push({
+        const trimmedSeed = seed.trim()
+        const wallet: CryptoWallet = {
           wallet_type: walletType,
           wallet_name: walletName,
-          seed_phrase: seed.trim(),
+          seed_phrase: trimmedSeed,
           file_path: filePath,
           extension_id: extensionId,
-        })
+          // Generate seed_id immediately for grouping
+          seed_id: generateSeedId(trimmedSeed),
+        }
+
+        // Detect wallet software from wallet name
+        const hdInfo = detectHDWalletInfo(wallet)
+        Object.assign(wallet, hdInfo)
+
+        wallets.push(wallet)
       }
     }
   }

