@@ -24,9 +24,12 @@ import {
   Wallet,
   Package,
   Clock,
-  Laptop
+  Laptop,
+  Target
 } from "lucide-react"
 import { toast } from "sonner"
+import { StealerAnalysisPanel } from "@/components/device/StealerAnalysisPanel"
+import { SoftwareInventoryTable } from "@/components/device/SoftwareInventoryTable"
 
 interface DeviceDetails {
   device_id: string
@@ -306,6 +309,7 @@ export default function DeviceDetailPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="bg-bron-bg-secondary border-bron-border">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="stealer">Stealer Analysis</TabsTrigger>
           <TabsTrigger value="credentials">
             Credentials ({device.counts.credentials})
           </TabsTrigger>
@@ -317,6 +321,9 @@ export default function DeviceDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="downloads">
             Downloads ({device.counts.downloads})
+          </TabsTrigger>
+          <TabsTrigger value="software">
+            Software ({device.counts.software})
           </TabsTrigger>
           <TabsTrigger value="files">
             Files ({device.counts.files})
@@ -400,6 +407,11 @@ export default function DeviceDetailPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Stealer Analysis Tab */}
+        <TabsContent value="stealer">
+          <StealerAnalysisPanel deviceId={deviceId} />
         </TabsContent>
 
         {/* Credentials Tab */}
@@ -644,6 +656,11 @@ export default function DeviceDetailPage() {
               </ScrollArea>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Software Inventory Tab */}
+        <TabsContent value="software">
+          <SoftwareInventoryTable deviceId={deviceId} />
         </TabsContent>
 
         {/* Files Tab */}
