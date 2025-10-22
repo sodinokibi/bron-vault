@@ -32,6 +32,7 @@ import { StealerAnalysisPanel } from "@/components/device/StealerAnalysisPanel"
 import { SoftwareInventoryTable } from "@/components/device/SoftwareInventoryTable"
 import { AutofillDataTable } from "@/components/device/AutofillDataTable"
 import { CreditCardsTable } from "@/components/device/CreditCardsTable"
+import { SessionsTable } from "@/components/device/SessionsTable"
 import { RiskBadge, RiskScoreBar } from "@/components/ui/risk-badge"
 import { RiskScore } from "@/lib/risk-scoring"
 
@@ -575,75 +576,7 @@ export default function DeviceDetailPage() {
 
         {/* Sessions Tab */}
         <TabsContent value="sessions">
-          <Card className="bg-bron-bg-secondary border-bron-border">
-            <CardHeader>
-              <CardTitle className="text-bron-text-primary">Cookie Sessions</CardTitle>
-              <CardDescription className="text-bron-text-muted">
-                {device.counts.cookie_sessions} detected sessions
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[600px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-bron-border hover:bg-bron-bg-tertiary">
-                      <TableHead className="text-bron-text-muted">Service</TableHead>
-                      <TableHead className="text-bron-text-muted">Category</TableHead>
-                      <TableHead className="text-bron-text-muted">Account</TableHead>
-                      <TableHead className="text-bron-text-muted">Browser</TableHead>
-                      <TableHead className="text-bron-text-muted">Status</TableHead>
-                      <TableHead className="text-bron-text-muted">Expires</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sessions.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center text-bron-text-muted py-8">
-                          No cookie sessions found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      sessions.map((session: any, index: number) => (
-                        <TableRow
-                          key={index}
-                          className="border-bron-border hover:bg-bron-bg-tertiary"
-                        >
-                          <TableCell className="font-medium text-bron-text-primary">
-                            {session.service}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="capitalize">
-                              {session.service_category}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-bron-text-primary max-w-[200px] truncate">
-                            {session.account_identifier || "—"}
-                          </TableCell>
-                          <TableCell className="text-bron-text-muted">
-                            {session.browser || "—"}
-                          </TableCell>
-                          <TableCell>
-                            {session.session_valid ? (
-                              <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                                Valid
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-red-500/10 text-red-500 border-red-500/20">
-                                Expired
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-bron-text-muted">
-                            {session.expires_at ? new Date(session.expires_at).toLocaleDateString() : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
+          <SessionsTable deviceId={deviceId} />
         </TabsContent>
 
         {/* Autofill Tab */}
