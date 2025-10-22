@@ -1,12 +1,20 @@
 "use client"
 
 import React, { useMemo } from "react"
-import { Monitor, Globe, User, Lock, Eye, EyeOff } from "lucide-react"
+import { Monitor, Globe, User, Lock, Eye, EyeOff, Download } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface Credential {
   browser: string
@@ -105,6 +113,27 @@ export function CredentialsTable({
     })
   }, [deviceCredentials, credentialsSearchQuery])
 
+  const handleExport = async (format: string) => {
+    try {
+      const response = await fetch(`/api/v1/credentials/export?format=${format}&device_id=${deviceId}`)
+
+      if (!response.ok) {
+        throw new Error("Export failed")
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = response.headers.get("Content-Disposition")?.split("filename=")[1]?.replace(/"/g, "") || `credentials-${format}-${Date.now()}.txt`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error("Export error:", error)
+      alert("Failed to export credentials")
+    }
+  }
+
   if (isLoadingCredentials) {
     return (
       <div className="flex items-center justify-center h-32">
@@ -169,6 +198,53 @@ export function CredentialsTable({
             {showPasswords ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             <span className="text-xs">{showPasswords ? "Hide" : "Show"}</span>
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 px-3 flex items-center space-x-2 shrink-0 bg-bron-bg-tertiary border-bron-border text-bron-text-primary hover:bg-bron-bg-primary"
+              >
+                <Download className="h-4 w-4" />
+                <span className="text-xs">Export</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleExport("url_pass")}>
+                <div className="flex flex-col">
+                  <span>URL:Password</span>
+                  <span className="text-xs text-muted-foreground">https://example.com:pass123</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("email_pass")}>
+                <div className="flex flex-col">
+                  <span>Email:Password</span>
+                  <span className="text-xs text-muted-foreground">user@example.com:pass123</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("username_pass")}>
+                <div className="flex flex-col">
+                  <span>Username:Password</span>
+                  <span className="text-xs text-muted-foreground">username:pass123</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("full")}>
+                <div className="flex flex-col">
+                  <span>Full (URL|User|Pass)</span>
+                  <span className="text-xs text-muted-foreground">Pipe-separated format</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleExport("csv")}>
+                CSV Export
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("json")}>
+                JSON Export
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       <div className="bg-bron-bg-tertiary border border-bron-border rounded-lg overflow-hidden">

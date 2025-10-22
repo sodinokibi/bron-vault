@@ -30,6 +30,8 @@ import {
 import { toast } from "sonner"
 import { StealerAnalysisPanel } from "@/components/device/StealerAnalysisPanel"
 import { SoftwareInventoryTable } from "@/components/device/SoftwareInventoryTable"
+import { AutofillDataTable } from "@/components/device/AutofillDataTable"
+import { CreditCardsTable } from "@/components/device/CreditCardsTable"
 
 interface DeviceDetails {
   device_id: string
@@ -316,6 +318,12 @@ export default function DeviceDetailPage() {
           <TabsTrigger value="sessions">
             Sessions ({device.counts.cookie_sessions})
           </TabsTrigger>
+          <TabsTrigger value="autofill">
+            Autofill
+          </TabsTrigger>
+          <TabsTrigger value="credit_cards">
+            Credit Cards
+          </TabsTrigger>
           <TabsTrigger value="bookmarks">
             Bookmarks ({device.counts.bookmarks})
           </TabsTrigger>
@@ -542,6 +550,16 @@ export default function DeviceDetailPage() {
               </ScrollArea>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Autofill Tab */}
+        <TabsContent value="autofill">
+          <AutofillDataTable deviceId={deviceId} />
+        </TabsContent>
+
+        {/* Credit Cards Tab */}
+        <TabsContent value="credit_cards">
+          <CreditCardsTable deviceId={deviceId} />
         </TabsContent>
 
         {/* Bookmarks Tab */}
