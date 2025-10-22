@@ -1,6 +1,6 @@
 "use client"
 
-import { Search, Upload, BarChart3, Bug, MessageCircle, Cookie, Laptop } from "lucide-react"
+import { Search, Upload, BarChart3, Bug, MessageCircle, Cookie, Laptop, Settings, Key } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
@@ -60,6 +60,14 @@ const menuItems = [
   },
 ]
 
+const adminItems = [
+  {
+    title: "API Keys",
+    url: "/admin/api-keys",
+    icon: Key,
+  },
+]
+
 export function AppSidebar() {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
@@ -98,6 +106,30 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === item.url}
+                    className={`
+                      text-bron-text-muted hover:text-bron-text-primary hover:bg-bron-bg-tertiary
+                      ${pathname === item.url ? "bg-bron-accent-red text-bron-text-primary" : ""}
+                    `}
+                  >
+                    <Link href={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-bron-text-muted">Admin</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {adminItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
