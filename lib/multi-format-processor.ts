@@ -421,12 +421,17 @@ export async function processArchiveFile(
         escapePassword(c.password),
         c.browser || null,
         c.file_path,
+        // Category fields
+        c.categories ? JSON.stringify(c.categories) : null,
+        c.primary_category || null,
+        c.risk_level || 'unknown',
+        c.risk_score || 0,
       ])
 
       if (values.length > 0) {
-        const placeholders = values.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ")
+        const placeholders = values.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")
         await executeQuery(
-          `INSERT INTO credentials (device_id, url, domain, tld, username, password, browser, file_path) VALUES ${placeholders}`,
+          `INSERT INTO credentials (device_id, url, domain, tld, username, password, browser, file_path, categories, primary_category, risk_level, risk_score) VALUES ${placeholders}`,
           values.flat(),
         )
       }
@@ -448,12 +453,17 @@ export async function processArchiveFile(
         c.browser || null,
         c.profile || null,
         c.file_path,
+        // Category fields
+        c.categories ? JSON.stringify(c.categories) : null,
+        c.primary_category || null,
+        c.risk_level || 'unknown',
+        c.risk_score || 0,
       ])
 
       if (values.length > 0) {
-        const placeholders = values.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")
+        const placeholders = values.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")
         await executeQuery(
-          `INSERT INTO cookies (device_id, host_key, name, value, path, expires_utc, is_secure, is_httponly, same_site, browser, profile, file_path) VALUES ${placeholders}`,
+          `INSERT INTO cookies (device_id, host_key, name, value, path, expires_utc, is_secure, is_httponly, same_site, browser, profile, file_path, categories, primary_category, risk_level, risk_score) VALUES ${placeholders}`,
           values.flat(),
         )
       }
@@ -563,8 +573,8 @@ export async function processArchiveFile(
     // Insert browser history
     for (const historyEntry of parsedData.history) {
       await executeQuery(
-        `INSERT INTO browser_history (device_id, url, title, visit_count, last_visit_time, browser, profile, file_path)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO browser_history (device_id, url, title, visit_count, last_visit_time, browser, profile, file_path, categories, primary_category, risk_level, risk_score)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           deviceId,
           historyEntry.url,
@@ -574,6 +584,11 @@ export async function processArchiveFile(
           historyEntry.browser,
           historyEntry.profile || null,
           historyEntry.file_path,
+          // Category fields
+          historyEntry.categories ? JSON.stringify(historyEntry.categories) : null,
+          historyEntry.primary_category || null,
+          historyEntry.risk_level || 'unknown',
+          historyEntry.risk_score || 0,
         ],
       )
     }

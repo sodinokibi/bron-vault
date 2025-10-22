@@ -27,6 +27,11 @@ export interface BrowserHistory {
   browser: string
   profile?: string
   file_path: string
+  // Category detection fields (logSniper-inspired)
+  categories?: string[]
+  primary_category?: string
+  risk_level?: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+  risk_score?: number
 }
 
 // Download history data structure
@@ -67,6 +72,11 @@ export interface Cookie {
   browser?: string
   profile?: string
   file_path: string
+  // Category detection fields (logSniper-inspired)
+  categories?: string[]
+  primary_category?: string
+  risk_level?: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+  risk_score?: number
 }
 
 // Browser extension data structure
@@ -158,6 +168,11 @@ export interface Credential {
   email_domain?: string
   browser?: string
   file_path: string
+  // Category detection fields (logSniper-inspired)
+  categories?: string[]
+  primary_category?: string
+  risk_level?: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+  risk_score?: number
 }
 
 // Stealer metadata

@@ -2,6 +2,7 @@
  * Stealer Parser Utilities
  *
  * Common utility functions for parsing stealer logs
+ * Now with integrated category detection and risk scoring (logSniper-inspired)
  */
 
 import crypto from "crypto"
@@ -11,6 +12,7 @@ import {
   BROWSER_PATHS,
   FILE_PATTERNS,
 } from "./types"
+import { detectCategories } from "../category-detector"
 
 /**
  * Email parsing utilities
@@ -184,6 +186,9 @@ export function parsePasswordFile(
       const { domain, tld } = extractDomain(url)
       const emailInfo = parseEmail(username)
 
+      // Detect categories for this credential
+      const categoryMatch = detectCategories(url)
+
       credentials.push({
         url,
         domain,
@@ -193,6 +198,11 @@ export function parsePasswordFile(
         ...emailInfo, // Add email parsing fields
         browser,
         file_path: filePath,
+        // Category detection
+        categories: categoryMatch.categories,
+        primary_category: categoryMatch.primaryCategory,
+        risk_level: categoryMatch.riskLevel,
+        risk_score: categoryMatch.riskScore,
       })
     }
   }
@@ -219,8 +229,13 @@ export function parseNetscapeCookies(content: string, filePath: string) {
 
     const [domain, , path, secure, expiresStr, name, value] = parts
 
+    const hostKey = domain.trim()
+
+    // Detect categories for this cookie's domain
+    const categoryMatch = detectCategories(hostKey)
+
     cookies.push({
-      host_key: domain.trim(),
+      host_key: hostKey,
       name: name.trim(),
       value: value.trim(),
       path: path.trim(),
@@ -230,6 +245,11 @@ export function parseNetscapeCookies(content: string, filePath: string) {
       browser,
       profile,
       file_path: filePath,
+      // Category detection
+      categories: categoryMatch.categories,
+      primary_category: categoryMatch.primaryCategory,
+      risk_level: categoryMatch.riskLevel,
+      risk_score: categoryMatch.riskScore,
     })
   }
 
@@ -246,19 +266,31 @@ export function parseJSONCookies(content: string, filePath: string) {
     const profile = extractProfile(filePath)
 
     if (Array.isArray(data)) {
-      return data.map((cookie) => ({
-        host_key: cookie.domain || cookie.host_key || "",
-        name: cookie.name || "",
-        value: cookie.value || "",
-        path: cookie.path || "/",
-        expires_utc: cookie.expirationDate || cookie.expires_utc || 0,
-        is_secure: cookie.secure || cookie.is_secure || false,
-        is_httponly: cookie.httpOnly || cookie.is_httponly || false,
-        same_site: cookie.sameSite || cookie.same_site,
-        browser,
-        profile,
-        file_path: filePath,
-      }))
+      return data.map((cookie) => {
+        const hostKey = cookie.domain || cookie.host_key || ""
+
+        // Detect categories for this cookie's domain
+        const categoryMatch = detectCategories(hostKey)
+
+        return {
+          host_key: hostKey,
+          name: cookie.name || "",
+          value: cookie.value || "",
+          path: cookie.path || "/",
+          expires_utc: cookie.expirationDate || cookie.expires_utc || 0,
+          is_secure: cookie.secure || cookie.is_secure || false,
+          is_httponly: cookie.httpOnly || cookie.is_httponly || false,
+          same_site: cookie.sameSite || cookie.same_site,
+          browser,
+          profile,
+          file_path: filePath,
+          // Category detection
+          categories: categoryMatch.categories,
+          primary_category: categoryMatch.primaryCategory,
+          risk_level: categoryMatch.riskLevel,
+          risk_score: categoryMatch.riskScore,
+        }
+      })
     }
 
     return []

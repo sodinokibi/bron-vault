@@ -2,6 +2,7 @@
  * SQLite Database Parser
  *
  * Parses Chrome/Chromium SQLite databases for cookies, history, downloads, and bookmarks
+ * Now with integrated category detection and risk scoring (logSniper-inspired)
  */
 
 import Database from "better-sqlite3"
@@ -14,6 +15,7 @@ import type {
   ParsedFile,
 } from "./types"
 import { detectBrowser, extractProfile } from "./utils"
+import { detectCategories } from "../category-detector"
 
 /**
  * Parse Chrome Cookies SQLite database
@@ -53,19 +55,31 @@ export function parseSQLiteCookies(
 
     db.close()
 
-    return rows.map((row) => ({
-      host_key: row.host_key || "",
-      name: row.name || "",
-      value: row.value || "",
-      path: row.path || "/",
-      expires_utc: row.expires_utc || 0,
-      is_secure: row.is_secure === 1,
-      is_httponly: row.is_httponly === 1,
-      same_site: getSameSiteString(row.samesite),
-      browser,
-      profile,
-      file_path: originalPath,
-    }))
+    return rows.map((row) => {
+      const hostKey = row.host_key || ""
+
+      // Detect categories for this cookie's domain
+      const categoryMatch = detectCategories(hostKey)
+
+      return {
+        host_key: hostKey,
+        name: row.name || "",
+        value: row.value || "",
+        path: row.path || "/",
+        expires_utc: row.expires_utc || 0,
+        is_secure: row.is_secure === 1,
+        is_httponly: row.is_httponly === 1,
+        same_site: getSameSiteString(row.samesite),
+        browser,
+        profile,
+        file_path: originalPath,
+        // Category detection
+        categories: categoryMatch.categories,
+        primary_category: categoryMatch.primaryCategory,
+        risk_level: categoryMatch.riskLevel,
+        risk_score: categoryMatch.riskScore,
+      }
+    })
   } catch (error) {
     console.error(`Failed to parse SQLite cookies from ${filePath}:`, error)
     return []
@@ -107,15 +121,27 @@ export function parseSQLiteHistory(
 
     db.close()
 
-    return rows.map((row) => ({
-      url: row.url || "",
-      title: row.title || undefined,
-      visit_count: row.visit_count || 1,
-      last_visit_time: row.last_visit_time || 0,
-      browser,
-      profile,
-      file_path: originalPath,
-    }))
+    return rows.map((row) => {
+      const url = row.url || ""
+
+      // Detect categories for this URL
+      const categoryMatch = detectCategories(url)
+
+      return {
+        url,
+        title: row.title || undefined,
+        visit_count: row.visit_count || 1,
+        last_visit_time: row.last_visit_time || 0,
+        browser,
+        profile,
+        file_path: originalPath,
+        // Category detection
+        categories: categoryMatch.categories,
+        primary_category: categoryMatch.primaryCategory,
+        risk_level: categoryMatch.riskLevel,
+        risk_score: categoryMatch.riskScore,
+      }
+    })
   } catch (error) {
     console.error(`Failed to parse SQLite history from ${filePath}:`, error)
     return []
@@ -283,16 +309,28 @@ export function parseSQLiteLogins(filePath: string, originalPath: string) {
 
     db.close()
 
-    return rows.map((row) => ({
-      url: row.origin_url || "",
-      username: row.username_value || "",
-      password_encrypted: row.password_value, // Binary blob, encrypted
-      date_created: row.date_created || 0,
-      times_used: row.times_used || 0,
-      browser,
-      profile,
-      file_path: originalPath,
-    }))
+    return rows.map((row) => {
+      const url = row.origin_url || ""
+
+      // Detect categories for this credential URL
+      const categoryMatch = detectCategories(url)
+
+      return {
+        url,
+        username: row.username_value || "",
+        password_encrypted: row.password_value, // Binary blob, encrypted
+        date_created: row.date_created || 0,
+        times_used: row.times_used || 0,
+        browser,
+        profile,
+        file_path: originalPath,
+        // Category detection
+        categories: categoryMatch.categories,
+        primary_category: categoryMatch.primaryCategory,
+        risk_level: categoryMatch.riskLevel,
+        risk_score: categoryMatch.riskScore,
+      }
+    })
   } catch (error) {
     console.error(`Failed to parse SQLite logins from ${filePath}:`, error)
     return []
