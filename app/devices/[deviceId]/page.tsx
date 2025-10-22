@@ -32,6 +32,8 @@ import { StealerAnalysisPanel } from "@/components/device/StealerAnalysisPanel"
 import { SoftwareInventoryTable } from "@/components/device/SoftwareInventoryTable"
 import { AutofillDataTable } from "@/components/device/AutofillDataTable"
 import { CreditCardsTable } from "@/components/device/CreditCardsTable"
+import { RiskBadge, RiskScoreBar } from "@/components/ui/risk-badge"
+import { RiskScore } from "@/lib/risk-scoring"
 
 interface DeviceDetails {
   device_id: string
@@ -97,6 +99,7 @@ export default function DeviceDetailPage() {
   const [bookmarks, setBookmarks] = useState<any[]>([])
   const [downloads, setDownloads] = useState<any[]>([])
   const [files, setFiles] = useState<any[]>([])
+  const [riskScore, setRiskScore] = useState<RiskScore | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
 
@@ -116,7 +119,8 @@ export default function DeviceDetailPage() {
         sessionsRes,
         bookmarksRes,
         downloadsRes,
-        filesRes
+        filesRes,
+        riskRes
       ] = await Promise.all([
         fetch(`/api/v1/devices/${deviceId}`),
         fetch(`/api/v1/devices/${deviceId}/credentials?limit=100`),
@@ -124,7 +128,8 @@ export default function DeviceDetailPage() {
         fetch(`/api/v1/cookie-sessions/${deviceId}`),
         fetch(`/api/v1/devices/${deviceId}/bookmarks?limit=100`),
         fetch(`/api/v1/devices/${deviceId}/downloads?limit=100`),
-        fetch(`/api/v1/devices/${deviceId}/files`)
+        fetch(`/api/v1/devices/${deviceId}/files`),
+        fetch(`/api/v1/devices/${deviceId}/risk-score`)
       ])
 
       const deviceData = await deviceRes.json()
@@ -134,6 +139,7 @@ export default function DeviceDetailPage() {
       const bookmarksData = await bookmarksRes.json()
       const downloadsData = await downloadsRes.json()
       const filesData = await filesRes.json()
+      const riskData = await riskRes.json()
 
       if (deviceData.success) {
         setDevice(deviceData.device)
@@ -163,6 +169,10 @@ export default function DeviceDetailPage() {
 
       if (filesData.success) {
         setFiles(filesData.files || [])
+      }
+
+      if (riskData.success && riskData.risk_score) {
+        setRiskScore(riskData.risk_score)
       }
     } catch (error) {
       console.error("Error fetching device details:", error)
@@ -231,15 +241,27 @@ export default function DeviceDetailPage() {
             </p>
           </div>
         </div>
-        {device.stealer_info && (
-          <Badge
-            variant="outline"
-            className="bg-bron-accent-red/10 text-bron-accent-red border-bron-accent-red/20"
-          >
-            <Shield className="h-3 w-3 mr-1" />
-            {device.stealer_info.stealer_family} ({device.stealer_info.confidence}% confidence)
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {riskScore && (
+            <RiskBadge
+              score={riskScore.score}
+              level={riskScore.level}
+              showIcon={true}
+              showScore={true}
+              factors={riskScore.factors}
+              size="lg"
+            />
+          )}
+          {device.stealer_info && (
+            <Badge
+              variant="outline"
+              className="bg-bron-accent-red/10 text-bron-accent-red border-bron-accent-red/20"
+            >
+              <Shield className="h-3 w-3 mr-1" />
+              {device.stealer_info.stealer_family} ({device.stealer_info.confidence}% confidence)
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Stats Overview */}
@@ -415,6 +437,78 @@ export default function DeviceDetailPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Risk Assessment Card */}
+          {riskScore && (
+            <Card className="bg-bron-bg-secondary border-bron-border">
+              <CardHeader>
+                <CardTitle className="text-bron-text-primary flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Security Risk Assessment
+                </CardTitle>
+                <CardDescription className="text-bron-text-muted">
+                  Comprehensive risk analysis for this device
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <RiskScoreBar
+                      score={riskScore.score}
+                      level={riskScore.level}
+                      showLabel={true}
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <RiskBadge
+                      score={riskScore.score}
+                      level={riskScore.level}
+                      showIcon={true}
+                      showScore={true}
+                      size="lg"
+                    />
+                  </div>
+                </div>
+
+                {riskScore.factors && riskScore.factors.length > 0 && (
+                  <div>
+                    <div className="text-sm font-semibold text-bron-text-primary mb-2">
+                      Risk Factors:
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {riskScore.factors.map((factor, index) => (
+                        <div
+                          key={index}
+                          className="flex items-start gap-2 text-sm p-2 bg-bron-bg-tertiary rounded"
+                        >
+                          <AlertTriangle className="h-4 w-4 text-bron-accent-yellow flex-shrink-0 mt-0.5" />
+                          <span className="text-bron-text-primary">{factor}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {riskScore.recommendations && riskScore.recommendations.length > 0 && (
+                  <div>
+                    <div className="text-sm font-semibold text-bron-text-primary mb-2">
+                      Recommended Actions:
+                    </div>
+                    <ol className="space-y-2">
+                      {riskScore.recommendations.map((rec, index) => (
+                        <li key={index} className="flex gap-3 text-sm">
+                          <div className="flex-shrink-0 w-6 h-6 rounded-full bg-bron-accent-blue text-white flex items-center justify-center text-xs font-semibold">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1 pt-0.5 text-bron-text-primary">{rec}</div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Stealer Analysis Tab */}
