@@ -151,6 +151,10 @@ export async function insertCryptoWallets(
     wallet.seed_id || null,
     wallet.address_index || null,
     wallet.wallet_software || null,
+    // Ledger Live fields
+    wallet.ledger_device_model || null,
+    wallet.ledger_balance_usd || null,
+    wallet.ledger_operations_count || null,
   ])
 
   const query = `
@@ -159,7 +163,7 @@ export async function insertCryptoWallets(
       seed_phrase, mnemonic, keystore_file, password_hint,
       file_path, blockchain, public_key, account_name, network_config,
       vault_data, extension_id, derivation_path, seed_id, address_index,
-      wallet_software
+      wallet_software, ledger_device_model, ledger_balance_usd, ledger_operations_count
     ) VALUES ?
   `
 

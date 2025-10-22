@@ -17,12 +17,19 @@ import {
   detectSharedSeed,
   type DerivedAddress
 } from "../hd-wallet-analyzer"
+import {
+  parseLedgerLive,
+  hasLedgerLive,
+  calculateLedgerRiskScore,
+  type LedgerLiveData,
+  type LedgerAccount
+} from "../ledger-live-parser"
 
 /**
  * Crypto wallet data interface
  */
 export interface CryptoWallet {
-  wallet_type: "browser_extension" | "desktop_app" | "mobile" | "other"
+  wallet_type: "browser_extension" | "desktop_app" | "mobile" | "hardware_wallet" | "other"
   wallet_name: string
   address?: string
   private_key?: string
@@ -43,6 +50,10 @@ export interface CryptoWallet {
   seed_id?: string // Hash of seed phrase to group derived addresses
   address_index?: number
   wallet_software?: string // Detected wallet software (MetaMask, Phantom, etc.)
+  // Ledger Live specific
+  ledger_device_model?: string // Nano S, Nano X, Nano S Plus
+  ledger_balance_usd?: string // USD balance (if available)
+  ledger_operations_count?: number // Transaction count
 }
 
 /**
@@ -719,6 +730,81 @@ export function findSeedPhrasesInTextFiles(rootPath: string): CryptoWallet[] {
 }
 
 /**
+ * Parse Ledger Live installation and convert to CryptoWallet format
+ */
+function parseLedgerLiveWallets(logDirectory: string): CryptoWallet[] {
+  const wallets: CryptoWallet[] = []
+
+  try {
+    // Ledger Live data might be in user profile
+    const ledgerData = parseLedgerLive(logDirectory)
+
+    if (!ledgerData) {
+      return wallets
+    }
+
+    console.log(`✅ Ledger Live found: ${ledgerData.total_accounts} accounts, ${ledgerData.currencies.length} currencies`)
+    if (ledgerData.total_balance_usd) {
+      console.log(`💰 Total portfolio value: $${ledgerData.total_balance_usd}`)
+    }
+
+    // Calculate risk score
+    const riskScore = calculateLedgerRiskScore(ledgerData)
+    console.log(`⚠️  Risk Score: ${riskScore}/100 ${riskScore >= 70 ? '(HIGH VALUE)' : ''}`)
+
+    // Convert each Ledger account to CryptoWallet format
+    for (const account of ledgerData.accounts) {
+      const wallet: CryptoWallet = {
+        wallet_type: "hardware_wallet",
+        wallet_name: "Ledger Live",
+        address: account.address,
+        blockchain: account.currency,
+        file_path: ledgerData.installation_path,
+        account_name: account.name,
+        derivation_path: account.derivation_path,
+        address_index: account.account_index,
+        wallet_software: `Ledger ${ledgerData.device_info?.model || 'Hardware Wallet'}`,
+        ledger_device_model: ledgerData.device_info?.model,
+        ledger_balance_usd: account.balance_usd,
+        ledger_operations_count: account.operations_count
+      }
+
+      // Add HD wallet detection for Ledger accounts
+      const hdInfo = detectHDWalletInfo(wallet)
+      Object.assign(wallet, hdInfo)
+
+      wallets.push(wallet)
+
+      // For UTXO chains, also add the fresh address if different
+      if (account.fresh_address && account.fresh_address !== account.address) {
+        wallets.push({
+          ...wallet,
+          address: account.fresh_address,
+          account_name: `${account.name} (Fresh Address)`
+        })
+      }
+    }
+
+    // Log summary
+    if (wallets.length > 0) {
+      console.log(`🔑 Ledger Live Intelligence:`)
+      console.log(`   - ${wallets.length} addresses extracted`)
+      console.log(`   - Currencies: ${ledgerData.currencies.join(', ')}`)
+      if (ledgerData.device_info?.model) {
+        console.log(`   - Device: ${ledgerData.device_info.model}`)
+      }
+      console.log(`   ⚠️  Note: Private keys are on hardware device (not extractable)`)
+      console.log(`   ⚠️  Intelligence value: On-chain monitoring, social engineering, physical theft`)
+    }
+
+  } catch (err) {
+    console.error(`⚠️  Error parsing Ledger Live: ${err}`)
+  }
+
+  return wallets
+}
+
+/**
  * Parse all crypto wallet data from stealer log
  */
 export function parseAllCryptoWallets(logDirectory: string): CryptoWallet[] {
@@ -744,6 +830,14 @@ export function parseAllCryptoWallets(logDirectory: string): CryptoWallet[] {
   // Parse desktop wallets
   const desktopWallets = parseDesktopWallets(logDirectory)
   allWallets.push(...desktopWallets)
+
+  // Parse Ledger Live (hardware wallet software)
+  console.log("🔍 Checking for Ledger Live installation...")
+  const ledgerWallets = parseLedgerLiveWallets(logDirectory)
+  if (ledgerWallets.length > 0) {
+    console.log(`🎯 HIGH-VALUE TARGET: Ledger Live detected with ${ledgerWallets.length} accounts`)
+    allWallets.push(...ledgerWallets)
+  }
 
   // Find seed phrases in text files
   const textFileWallets = findSeedPhrasesInTextFiles(logDirectory)

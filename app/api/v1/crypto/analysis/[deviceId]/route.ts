@@ -41,7 +41,7 @@ export async function GET(
 
     const device = deviceResults[0]
 
-    // Get crypto wallets with HD wallet fields
+    // Get crypto wallets with HD wallet and Ledger Live fields
     const wallets = await executeQuery<any>(
       `SELECT
         wallet_type,
@@ -57,10 +57,18 @@ export async function GET(
         derivation_path,
         seed_id,
         address_index,
-        wallet_software
+        wallet_software,
+        ledger_device_model,
+        ledger_balance_usd,
+        ledger_operations_count
        FROM crypto_wallets
        WHERE device_id = ?
-       ORDER BY seed_id DESC, address_index ASC, wallet_type, wallet_name`,
+       ORDER BY
+         CASE WHEN wallet_type = 'hardware_wallet' THEN 0 ELSE 1 END,
+         seed_id DESC,
+         address_index ASC,
+         wallet_type,
+         wallet_name`,
       [deviceId]
     )
 
@@ -166,6 +174,32 @@ export async function GET(
       wallet_software_detected: new Set(wallets?.filter((w: any) => w.wallet_software).map((w: any) => w.wallet_software)).size
     }
 
+    // Ledger Live Detection & Statistics
+    const ledgerWallets = wallets?.filter((w: any) => w.wallet_type === 'hardware_wallet' && w.wallet_name === 'Ledger Live') || []
+    const hasLedger = ledgerWallets.length > 0
+    const ledgerStats = hasLedger ? {
+      detected: true,
+      total_accounts: ledgerWallets.length,
+      device_model: ledgerWallets[0]?.ledger_device_model || 'Unknown',
+      total_balance_usd: ledgerWallets
+        .filter((w: any) => w.ledger_balance_usd)
+        .reduce((sum: number, w: any) => sum + parseFloat(w.ledger_balance_usd || '0'), 0),
+      currencies: [...new Set(ledgerWallets.map((w: any) => w.blockchain).filter(Boolean))],
+      total_operations: ledgerWallets
+        .filter((w: any) => w.ledger_operations_count)
+        .reduce((sum: number, w: any) => sum + (w.ledger_operations_count || 0), 0),
+      accounts: ledgerWallets.map((w: any) => ({
+        currency: w.blockchain,
+        address: w.address,
+        derivation_path: w.derivation_path,
+        balance_usd: w.ledger_balance_usd,
+        operations_count: w.ledger_operations_count,
+        account_name: w.account_name
+      }))
+    } : {
+      detected: false
+    }
+
     // Group history by category
     const historyByCategory = groupBy(cryptoHistory, 'category')
 
@@ -187,6 +221,7 @@ export async function GET(
         seed_groups: seedGroups,
         stats: hdWalletStats
       },
+      ledger_live: ledgerStats,
       crypto_history: {
         all: cryptoHistory,
         by_category: historyByCategory,
