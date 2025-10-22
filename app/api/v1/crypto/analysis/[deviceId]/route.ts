@@ -41,7 +41,7 @@ export async function GET(
 
     const device = deviceResults[0]
 
-    // Get crypto wallets
+    // Get crypto wallets with HD wallet fields
     const wallets = await executeQuery<any>(
       `SELECT
         wallet_type,
@@ -50,10 +50,17 @@ export async function GET(
         blockchain,
         file_path,
         private_key IS NOT NULL as has_private_key,
-        seed_phrase IS NOT NULL as has_seed_phrase
+        seed_phrase IS NOT NULL as has_seed_phrase,
+        public_key,
+        account_name,
+        extension_id,
+        derivation_path,
+        seed_id,
+        address_index,
+        wallet_software
        FROM crypto_wallets
        WHERE device_id = ?
-       ORDER BY wallet_type, wallet_name`,
+       ORDER BY seed_id DESC, address_index ASC, wallet_type, wallet_name`,
       [deviceId]
     )
 
@@ -134,6 +141,31 @@ export async function GET(
     const walletsByBlockchain = groupBy(wallets?.filter((w: any) => w.blockchain) || [], 'blockchain')
     const walletsByName = groupBy(wallets || [], 'wallet_name')
 
+    // HD Wallet Analysis - Group by seed_id to find side wallets
+    const walletsBySeed = groupBy(wallets?.filter((w: any) => w.seed_id) || [], 'seed_id')
+    const seedGroups = Object.entries(walletsBySeed).map(([seed_id, seedWallets]) => ({
+      seed_id,
+      count: seedWallets.length,
+      wallet_software: seedWallets[0]?.wallet_software || 'Unknown',
+      blockchains: [...new Set(seedWallets.map((w: any) => w.blockchain).filter(Boolean))],
+      addresses: seedWallets.filter((w: any) => w.address).map((w: any) => ({
+        address: w.address,
+        blockchain: w.blockchain,
+        derivation_path: w.derivation_path,
+        address_index: w.address_index
+      })),
+      has_keys: seedWallets.some((w: any) => w.has_private_key || w.has_seed_phrase)
+    })).sort((a, b) => b.count - a.count)
+
+    // HD Wallet Statistics
+    const hdWalletStats = {
+      total_seed_groups: seedGroups.length,
+      total_hd_addresses: seedGroups.reduce((sum, g) => sum + g.count, 0),
+      seeds_with_multiple_addresses: seedGroups.filter(g => g.count > 1).length,
+      max_addresses_per_seed: Math.max(0, ...seedGroups.map(g => g.count)),
+      wallet_software_detected: new Set(wallets?.filter((w: any) => w.wallet_software).map((w: any) => w.wallet_software)).size
+    }
+
     // Group history by category
     const historyByCategory = groupBy(cryptoHistory, 'category')
 
@@ -148,7 +180,12 @@ export async function GET(
         by_type: walletsByType,
         by_blockchain: walletsByBlockchain,
         by_name: walletsByName,
+        by_seed: walletsBySeed,
         summary: walletSummary || []
+      },
+      hd_wallets: {
+        seed_groups: seedGroups,
+        stats: hdWalletStats
       },
       crypto_history: {
         all: cryptoHistory,

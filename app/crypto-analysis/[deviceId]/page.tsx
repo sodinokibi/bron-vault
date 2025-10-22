@@ -48,7 +48,30 @@ interface CryptoAnalysis {
     by_type: Record<string, any[]>
     by_blockchain: Record<string, any[]>
     by_name: Record<string, any[]>
+    by_seed: Record<string, any[]>
     summary: any[]
+  }
+  hd_wallets: {
+    seed_groups: Array<{
+      seed_id: string
+      count: number
+      wallet_software: string
+      blockchains: string[]
+      addresses: Array<{
+        address: string
+        blockchain: string
+        derivation_path: string
+        address_index: number
+      }>
+      has_keys: boolean
+    }>
+    stats: {
+      total_seed_groups: number
+      total_hd_addresses: number
+      seeds_with_multiple_addresses: number
+      max_addresses_per_seed: number
+      wallet_software_detected: number
+    }
   }
   crypto_history: {
     all: any[]
@@ -312,6 +335,9 @@ export default function CryptoAnalysisPage() {
           <TabsTrigger value="wallets">
             Wallets ({analysis.stats.total_wallets})
           </TabsTrigger>
+          <TabsTrigger value="hd-wallets">
+            HD Wallets ({analysis.hd_wallets?.stats.total_seed_groups || 0})
+          </TabsTrigger>
           <TabsTrigger value="history">
             Browser History ({analysis.stats.total_crypto_history})
           </TabsTrigger>
@@ -434,6 +460,136 @@ export default function CryptoAnalysisPage() {
               </ScrollArea>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* HD Wallets Tab */}
+        <TabsContent value="hd-wallets">
+          <div className="space-y-4">
+            {/* HD Wallet Statistics */}
+            <Card>
+              <CardHeader>
+                <CardTitle>HD Wallet Analysis</CardTitle>
+                <CardDescription>
+                  Hierarchical Deterministic wallet detection - Identifies "side wallets" derived from same seed phrase
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-5 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{analysis.hd_wallets?.stats.total_seed_groups || 0}</div>
+                    <div className="text-xs text-muted-foreground">Unique Seeds</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{analysis.hd_wallets?.stats.seeds_with_multiple_addresses || 0}</div>
+                    <div className="text-xs text-muted-foreground">Seeds with Side Wallets</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{analysis.hd_wallets?.stats.total_hd_addresses || 0}</div>
+                    <div className="text-xs text-muted-foreground">Total HD Addresses</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{analysis.hd_wallets?.stats.max_addresses_per_seed || 0}</div>
+                    <div className="text-xs text-muted-foreground">Max per Seed</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{analysis.hd_wallets?.stats.wallet_software_detected || 0}</div>
+                    <div className="text-xs text-muted-foreground">Wallets Identified</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Seed Groups */}
+            {analysis.hd_wallets?.seed_groups && analysis.hd_wallets.seed_groups.length > 0 ? (
+              analysis.hd_wallets.seed_groups.map((group, idx) => (
+                <Card key={group.seed_id} className={group.has_keys ? "border-red-500/50" : ""}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <Wallet className="h-5 w-5" />
+                          Seed Group #{idx + 1}
+                          {group.has_keys && (
+                            <Badge variant="destructive" className="ml-2">
+                              <Key className="h-3 w-3 mr-1" />
+                              Has Keys
+                            </Badge>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="mt-2 flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs">{group.seed_id.substring(0, 16)}...</span>
+                          <Badge variant="outline">{group.wallet_software}</Badge>
+                          <Badge variant="secondary">{group.count} {group.count === 1 ? 'address' : 'addresses'}</Badge>
+                          {group.blockchains.map(chain => (
+                            <Badge key={chain} className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                              {chain}
+                            </Badge>
+                          ))}
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[300px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Index</TableHead>
+                            <TableHead>Address</TableHead>
+                            <TableHead>Blockchain</TableHead>
+                            <TableHead>Derivation Path</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {group.addresses.map((addr, addrIdx) => (
+                            <TableRow key={addrIdx}>
+                              <TableCell className="font-mono">{addr.address_index ?? '—'}</TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {showSensitiveData ? addr.address : (addr.address ? `${addr.address.substring(0, 8)}...${addr.address.substring(addr.address.length - 6)}` : '—')}
+                              </TableCell>
+                              <TableCell>
+                                {addr.blockchain ? (
+                                  <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                                    {addr.blockchain}
+                                  </Badge>
+                                ) : '—'}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs">
+                                {addr.derivation_path || '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+
+                    {group.count > 1 && (
+                      <Alert className="mt-4">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          <strong>Side Wallets Detected:</strong> This seed phrase controls {group.count} different addresses.
+                          All of these addresses can be accessed with the same seed phrase.
+                          {group.has_keys && " The seed phrase or private keys were found in the device data."}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card>
+                <CardContent className="py-12">
+                  <div className="text-center text-muted-foreground">
+                    <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No HD wallet groups detected</p>
+                    <p className="text-sm mt-2">
+                      HD wallet detection requires seed phrases or derivation paths to be present
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
 
         {/* Browser History Tab */}

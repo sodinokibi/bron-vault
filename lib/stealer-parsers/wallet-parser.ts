@@ -162,10 +162,11 @@ function detectBlockchain(address: string): string | undefined {
 /**
  * Generate seed ID from seed phrase (SHA256 hash)
  * Used to group addresses derived from the same seed
+ * Returns full 64-character hex hash to avoid collisions
  */
 function generateSeedId(seedPhrase: string): string {
   const normalized = seedPhrase.toLowerCase().trim().replace(/\s+/g, ' ')
-  return createHash('sha256').update(normalized).digest('hex').substring(0, 16)
+  return createHash('sha256').update(normalized).digest('hex')
 }
 
 /**
