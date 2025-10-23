@@ -4,8 +4,9 @@
  * Analyzes cookies to detect active logged-in sessions for popular services
  * Identifies high-value authenticated sessions across browsers
  *
- * SUPPORTED SERVICES: 119 services across 13 categories
- * - 12 AI Services (ChatGPT, Claude, Gemini, OpenRouter, Hugging Face, Perplexity, etc.) ⭐ NEW
+ * SUPPORTED SERVICES: 131 services across 14 categories
+ * - 12 AI Services (ChatGPT, Claude, Gemini, OpenRouter, Hugging Face, Perplexity, etc.)
+ * - 12 GPU Cloud (RunPod, Vast.ai, Lambda Labs, Paperspace, CoreWeave, TensorDock, etc.) ⭐ NEW
  * - 16 Cryptocurrency Exchanges (Binance, Coinbase, Bybit, OKX, MEXC, Deribit, Uniswap, etc.)
  * - 15 Social Media (Google, Facebook, Instagram, WhatsApp, Telegram, Bluesky, Threads, etc.)
  * - 6 Cloud Platforms (AWS, Azure, GCP, DigitalOcean, Vercel, Netlify)
@@ -778,6 +779,92 @@ const SERVICE_PATTERNS: ServicePattern[] = [
     category: "ai",
     domains: [".cohere.com", ".dashboard.cohere.com"],
     auth_cookies: ["_cohere_session"],
+    high_value: true,
+  },
+
+  // GPU Cloud Services
+  {
+    name: "RunPod",
+    category: "gpu_cloud",
+    domains: [".runpod.io"],
+    auth_cookies: ["runpod-auth-token", "__session"],
+    high_value: true,
+  },
+  {
+    name: "Vast.ai",
+    category: "gpu_cloud",
+    domains: [".vast.ai"],
+    auth_cookies: ["session", "api_key"],
+    high_value: true,
+  },
+  {
+    name: "Lambda Labs",
+    category: "gpu_cloud",
+    domains: [".lambdalabs.com", ".cloud.lambdalabs.com"],
+    auth_cookies: ["_lambda_session", "auth_token"],
+    high_value: true,
+  },
+  {
+    name: "Paperspace",
+    category: "gpu_cloud",
+    domains: [".paperspace.com", ".console.paperspace.com"],
+    auth_cookies: ["ps_session", "sessionId"],
+    high_value: true,
+  },
+  {
+    name: "CoreWeave",
+    category: "gpu_cloud",
+    domains: [".coreweave.com", ".cloud.coreweave.com"],
+    auth_cookies: ["cw_session", "_coreweave_session"],
+    high_value: true,
+  },
+  {
+    name: "Genesis Cloud",
+    category: "gpu_cloud",
+    domains: [".genesiscloud.com"],
+    auth_cookies: ["_genesis_session", "token"],
+    high_value: true,
+  },
+  {
+    name: "Jarvis Labs",
+    category: "gpu_cloud",
+    domains: [".jarvislabs.ai"],
+    auth_cookies: ["jarvis_token", "sessionid"],
+    high_value: true,
+  },
+  {
+    name: "FluidStack",
+    category: "gpu_cloud",
+    domains: [".fluidstack.io"],
+    auth_cookies: ["_fluidstack_session"],
+    high_value: true,
+  },
+  {
+    name: "DataCrunch",
+    category: "gpu_cloud",
+    domains: [".datacrunch.io"],
+    auth_cookies: ["dc_session", "_datacrunch_session"],
+    high_value: true,
+  },
+  {
+    name: "Latitude.sh",
+    category: "gpu_cloud",
+    domains: [".latitude.sh"],
+    auth_cookies: ["_latitude_session", "auth_token"],
+    high_value: true,
+  },
+  {
+    name: "Scaleway GPU",
+    category: "gpu_cloud",
+    domains: [".console.scaleway.com"],
+    auth_cookies: ["scw_session", "scaleway-session"],
+    high_value: true,
+  },
+  {
+    name: "TensorDock",
+    category: "gpu_cloud",
+    domains: [".tensordock.com"],
+    auth_cookies: ["td_session", "_tensordock_session"],
     high_value: true,
   },
 
