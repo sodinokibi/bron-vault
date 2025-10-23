@@ -48,6 +48,7 @@
     "better-sqlite3": "^11.7.0",
     "bullmq": "^5.28.1",
     "class-variance-authority": "^0.7.1",
+    "classic-level": "^1.4.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "critters": "^0.0.25",
