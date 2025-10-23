@@ -37,10 +37,15 @@ interface CryptoAnalysis {
     total_wallets: number
     unique_wallet_types: number
     wallets_with_keys: number
+    wallets_with_private_keys: number
+    wallets_with_seeds: number
+    wallets_with_public_keys: number
+    wallets_with_vault_data: number
     unique_blockchains: number
     total_crypto_history: number
     total_crypto_sessions: number
     total_crypto_software: number
+    high_risk_wallets: number
     crypto_activity_score: number
   }
   wallets: {
@@ -72,6 +77,52 @@ interface CryptoAnalysis {
       max_addresses_per_seed: number
       wallet_software_detected: number
     }
+  }
+  vault_hashes: {
+    all: Array<{
+      wallet_name: string
+      wallet_type: string
+      blockchain: string
+      hash: string
+      hashcat_mode: string
+      iterations: number
+      kdf: string
+      can_crack: boolean
+      file_path: string
+    }>
+    count: number
+    by_wallet: Record<string, any[]>
+  }
+  public_keys: {
+    all: Array<{
+      wallet_name: string
+      wallet_type: string
+      blockchain: string
+      public_key: string
+      public_key_format: string
+      address: string
+      derivation_path: string
+      file_path: string
+    }>
+    count: number
+    by_blockchain: Record<string, any[]>
+    by_format: Record<string, any[]>
+  }
+  ledger_live?: {
+    detected: boolean
+    total_accounts?: number
+    device_model?: string
+    total_balance_usd?: number
+    currencies?: string[]
+    total_operations?: number
+    accounts?: Array<{
+      currency: string
+      address: string
+      derivation_path: string
+      balance_usd: number
+      operations_count: number
+      account_name: string
+    }>
   }
   crypto_history: {
     all: any[]
@@ -223,7 +274,7 @@ export default function CryptoAnalysisPage() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Wallets</CardTitle>
@@ -239,13 +290,24 @@ export default function CryptoAnalysisPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Crypto History</CardTitle>
-            <Globe className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Vault Hashes</CardTitle>
+            <Key className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{analysis.stats.total_crypto_history}</div>
+            <div className="text-2xl font-bold text-red-500">{analysis.vault_hashes?.count || 0}</div>
+            <p className="text-xs text-muted-foreground">Crackable vaults</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Public Keys</CardTitle>
+            <Key className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-500">{analysis.public_keys?.count || 0}</div>
             <p className="text-xs text-muted-foreground">
-              {analysis.crypto_history.top_sites.length} unique sites
+              {Object.keys(analysis.public_keys?.by_blockchain || {}).length} blockchains
             </p>
           </CardContent>
         </Card>
@@ -263,12 +325,14 @@ export default function CryptoAnalysisPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Crypto Software</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Crypto History</CardTitle>
+            <Globe className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{analysis.stats.total_crypto_software}</div>
-            <p className="text-xs text-muted-foreground">Installed programs</p>
+            <div className="text-2xl font-bold">{analysis.stats.total_crypto_history}</div>
+            <p className="text-xs text-muted-foreground">
+              {analysis.crypto_history.top_sites.length} sites
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -334,6 +398,12 @@ export default function CryptoAnalysisPage() {
         <TabsList>
           <TabsTrigger value="wallets">
             Wallets ({analysis.stats.total_wallets})
+          </TabsTrigger>
+          <TabsTrigger value="vault-hashes">
+            Vault Hashes ({analysis.vault_hashes?.count || 0})
+          </TabsTrigger>
+          <TabsTrigger value="public-keys">
+            Public Keys ({analysis.public_keys?.count || 0})
           </TabsTrigger>
           <TabsTrigger value="hd-wallets">
             HD Wallets ({analysis.hd_wallets?.stats.total_seed_groups || 0})
@@ -401,14 +471,15 @@ export default function CryptoAnalysisPage() {
                       <TableHead>Type</TableHead>
                       <TableHead>Blockchain</TableHead>
                       <TableHead>Address</TableHead>
-                      <TableHead>Security</TableHead>
+                      <TableHead>Keys/Seeds</TableHead>
+                      <TableHead>Risk</TableHead>
                       <TableHead>File Path</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {analysis.wallets.all.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           No wallets detected
                         </TableCell>
                       </TableRow>
@@ -437,20 +508,291 @@ export default function CryptoAnalysisPage() {
                             {showSensitiveData ? wallet.address || "—" : wallet.address ? "••••••••" : "—"}
                           </TableCell>
                           <TableCell>
-                            {wallet.has_private_key || wallet.has_seed_phrase ? (
-                              <Badge variant="destructive" className="flex items-center gap-1 w-fit">
-                                <Key className="h-3 w-3" />
-                                Has Keys
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="flex items-center gap-1 w-fit">
-                                <CheckCircle className="h-3 w-3" />
-                                Address Only
+                            <div className="flex flex-col gap-1">
+                              {wallet.has_seed_phrase && (
+                                <Badge variant="destructive" className="flex items-center gap-1 w-fit text-xs">
+                                  <Key className="h-3 w-3" />
+                                  Seed Phrase
+                                </Badge>
+                              )}
+                              {wallet.has_private_key && (
+                                <Badge variant="destructive" className="flex items-center gap-1 w-fit text-xs">
+                                  <Key className="h-3 w-3" />
+                                  Private Key
+                                </Badge>
+                              )}
+                              {wallet.public_key && (
+                                <Badge variant="secondary" className="flex items-center gap-1 w-fit text-xs">
+                                  <Key className="h-3 w-3" />
+                                  Public Key ({wallet.public_key_format || 'hex'})
+                                </Badge>
+                              )}
+                              {!wallet.has_seed_phrase && !wallet.has_private_key && !wallet.public_key && (
+                                <Badge variant="outline" className="flex items-center gap-1 w-fit text-xs">
+                                  <CheckCircle className="h-3 w-3" />
+                                  Address Only
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {wallet.risk_level && (
+                              <Badge
+                                variant={
+                                  wallet.risk_level === 'critical' ? 'destructive' :
+                                  wallet.risk_level === 'high' ? 'default' :
+                                  wallet.risk_level === 'medium' ? 'secondary' :
+                                  'outline'
+                                }
+                                className="text-xs"
+                              >
+                                {wallet.risk_level.toUpperCase()} ({wallet.risk_score || 0})
                               </Badge>
                             )}
                           </TableCell>
                           <TableCell className="text-xs text-muted-foreground max-w-[300px] truncate">
                             {wallet.file_path}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Vault Hashes Tab */}
+        <TabsContent value="vault-hashes">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Vault Hashes for Hashcat</CardTitle>
+                  <CardDescription>
+                    Encrypted wallet vaults that can be cracked offline
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (!analysis.vault_hashes || analysis.vault_hashes.count === 0) {
+                      toast.error("No vault hashes to export")
+                      return
+                    }
+                    const hashText = analysis.vault_hashes.all.map(v => v.hash).join('\n')
+                    const blob = new Blob([hashText], { type: 'text/plain' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `vault-hashes-${deviceId}-${Date.now()}.txt`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                    toast.success(`Exported ${analysis.vault_hashes.count} vault hash(es)`)
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export for Hashcat
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {analysis.vault_hashes && analysis.vault_hashes.count > 0 && (
+                <Alert className="mb-4 border-red-500/20 bg-red-500/10">
+                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                  <AlertDescription className="text-red-500">
+                    <strong>Critical:</strong> {analysis.vault_hashes.count} crackable vault(s) detected.
+                    These can be cracked offline to recover seed phrases.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <ScrollArea className="h-[600px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Wallet</TableHead>
+                      <TableHead>Blockchain</TableHead>
+                      <TableHead>Hashcat Mode</TableHead>
+                      <TableHead>Iterations</TableHead>
+                      <TableHead>KDF</TableHead>
+                      <TableHead>Hash</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {!analysis.vault_hashes || analysis.vault_hashes.count === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          <div>
+                            <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>No vault hashes detected</p>
+                            <p className="text-sm mt-2">
+                              Vault hashes allow offline password cracking to recover seed phrases
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      analysis.vault_hashes.all.map((vault, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Wallet className="h-4 w-4 text-red-500" />
+                              {vault.wallet_name}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {vault.blockchain ? (
+                              <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                                {vault.blockchain}
+                              </Badge>
+                            ) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono">
+                              {vault.hashcat_mode}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {vault.iterations.toLocaleString()} rounds
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{vault.kdf}</Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs max-w-[300px]">
+                            {showSensitiveData ? (
+                              <div className="truncate">{vault.hash}</div>
+                            ) : (
+                              <span>••••••••</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+
+              {analysis.vault_hashes && analysis.vault_hashes.count > 0 && (
+                <div className="mt-4 p-4 bg-muted rounded-md">
+                  <h4 className="font-semibold mb-2">Hashcat Usage Example:</h4>
+                  <code className="text-sm">
+                    hashcat -m 26600 vault-hashes.txt wordlist.txt
+                  </code>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Mode -m 26600 for MetaMask (600k iterations), -m 26620 for custom iterations
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Public Keys Tab */}
+        <TabsContent value="public-keys">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Extracted Public Keys</CardTitle>
+                  <CardDescription>
+                    Public keys from wallet extensions and LevelDB
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportToCSV(analysis.public_keys?.all || [], "public-keys")}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export CSV
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Stats by blockchain */}
+              {analysis.public_keys && analysis.public_keys.count > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                  {Object.entries(analysis.public_keys.by_blockchain).map(([blockchain, keys]) => (
+                    <Card key={blockchain}>
+                      <CardContent className="pt-6">
+                        <div className="text-center">
+                          <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                            {blockchain}
+                          </Badge>
+                          <div className="text-2xl font-bold mt-2">{keys.length}</div>
+                          <div className="text-xs text-muted-foreground">public keys</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+
+              <ScrollArea className="h-[600px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Wallet</TableHead>
+                      <TableHead>Blockchain</TableHead>
+                      <TableHead>Format</TableHead>
+                      <TableHead>Public Key</TableHead>
+                      <TableHead>Address</TableHead>
+                      <TableHead>Derivation Path</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {!analysis.public_keys || analysis.public_keys.count === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          <div>
+                            <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>No public keys extracted</p>
+                            <p className="text-sm mt-2">
+                              Public keys are extracted from wallet LevelDB and configuration files
+                            </p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      analysis.public_keys.all.map((pk, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Wallet className="h-4 w-4 text-blue-500" />
+                              {pk.wallet_name}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {pk.blockchain ? (
+                              <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                                {pk.blockchain}
+                              </Badge>
+                            ) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {pk.public_key_format || 'hex'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs max-w-[250px]">
+                            {showSensitiveData ? (
+                              <div className="truncate" title={pk.public_key}>
+                                {pk.public_key}
+                              </div>
+                            ) : (
+                              <span>••••••••</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs max-w-[150px] truncate">
+                            {showSensitiveData ? pk.address || '—' : pk.address ? '••••••••' : '—'}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {pk.derivation_path || '—'}
                           </TableCell>
                         </TableRow>
                       ))
@@ -887,6 +1229,88 @@ export default function CryptoAnalysisPage() {
                 </ScrollArea>
               </CardContent>
             </Card>
+
+            {/* Ledger Hardware Wallet Card */}
+            {analysis.ledger_live?.detected && (
+              <Card className="md:col-span-2 border-orange-500/20 bg-orange-500/5">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-orange-500" />
+                    Ledger Hardware Wallet Detected
+                  </CardTitle>
+                  <CardDescription>
+                    High-value target - Hardware wallet user detected
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-orange-500">
+                        {analysis.ledger_live.device_model || 'Unknown'}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Device Model</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-green-500">
+                        ${analysis.ledger_live.total_balance_usd?.toLocaleString() || '0'}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Total Portfolio (USD)</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-blue-500">
+                        {analysis.ledger_live.total_accounts || 0}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Accounts</div>
+                    </div>
+                  </div>
+
+                  {analysis.ledger_live.accounts && analysis.ledger_live.accounts.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-3">Accounts:</h4>
+                      <ScrollArea className="h-[200px]">
+                        <div className="space-y-2">
+                          {analysis.ledger_live.accounts.map((account, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-background rounded-md border">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">
+                                    {account.currency}
+                                  </Badge>
+                                  <span className="text-sm font-medium">
+                                    {account.account_name || 'Unnamed Account'}
+                                  </span>
+                                </div>
+                                <div className="font-mono text-xs text-muted-foreground mt-1">
+                                  {showSensitiveData ? account.address : '••••••••'}
+                                </div>
+                              </div>
+                              {account.balance_usd && (
+                                <div className="text-right">
+                                  <div className="text-sm font-bold text-green-500">
+                                    ${account.balance_usd.toLocaleString()}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {account.operations_count} ops
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+
+                  <Alert className="mt-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>High-Value Target:</strong> This user has a Ledger hardware wallet with tracked portfolio balance.
+                      Hardware wallets require physical access or phishing attacks to compromise.
+                    </AlertDescription>
+                  </Alert>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
       </Tabs>
