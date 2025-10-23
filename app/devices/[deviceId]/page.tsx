@@ -33,6 +33,9 @@ import { SoftwareInventoryTable } from "@/components/device/SoftwareInventoryTab
 import { AutofillDataTable } from "@/components/device/AutofillDataTable"
 import { CreditCardsTable } from "@/components/device/CreditCardsTable"
 import { SessionsTable } from "@/components/device/SessionsTable"
+import { CookiesTable } from "@/components/device/CookiesTable"
+import { AuthenticatorTable } from "@/components/device/AuthenticatorTable"
+import { CredentialsEnhancedTable } from "@/components/device/CredentialsEnhancedTable"
 import { RiskBadge, RiskScoreBar } from "@/components/ui/risk-badge"
 import { RiskScore } from "@/lib/risk-scoring"
 
@@ -348,6 +351,12 @@ export default function DeviceDetailPage() {
           <TabsTrigger value="sessions">
             Sessions ({device.counts.cookie_sessions})
           </TabsTrigger>
+          <TabsTrigger value="cookies">
+            Cookies ({device.counts.cookies})
+          </TabsTrigger>
+          <TabsTrigger value="authenticator">
+            2FA/Authenticator ({device.counts.two_fa_codes})
+          </TabsTrigger>
           <TabsTrigger value="autofill">
             Autofill
           </TabsTrigger>
@@ -526,64 +535,22 @@ export default function DeviceDetailPage() {
 
         {/* Credentials Tab */}
         <TabsContent value="credentials">
-          <Card className="bg-bron-bg-secondary border-bron-border">
-            <CardHeader>
-              <CardTitle className="text-bron-text-primary">Saved Credentials</CardTitle>
-              <CardDescription className="text-bron-text-muted">
-                {device.counts.credentials} credentials from this device
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[600px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-bron-border hover:bg-bron-bg-tertiary">
-                      <TableHead className="text-bron-text-muted">URL</TableHead>
-                      <TableHead className="text-bron-text-muted">Username</TableHead>
-                      <TableHead className="text-bron-text-muted">Password</TableHead>
-                      <TableHead className="text-bron-text-muted">Browser</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {credentials.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center text-bron-text-muted py-8">
-                          No credentials found
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      credentials.map((cred) => (
-                        <TableRow
-                          key={cred.id}
-                          className="border-bron-border hover:bg-bron-bg-tertiary"
-                        >
-                          <TableCell className="text-bron-text-primary max-w-[300px] truncate">
-                            {cred.url}
-                          </TableCell>
-                          <TableCell className="text-bron-text-primary">
-                            {cred.username}
-                          </TableCell>
-                          <TableCell className="text-bron-text-primary font-mono text-xs">
-                            {cred.password.substring(0, 3)}***
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="bg-bron-bg-tertiary">
-                              {cred.browser}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
+          <CredentialsEnhancedTable deviceId={deviceId} />
         </TabsContent>
 
         {/* Sessions Tab */}
         <TabsContent value="sessions">
           <SessionsTable deviceId={deviceId} />
+        </TabsContent>
+
+        {/* Cookies Tab */}
+        <TabsContent value="cookies">
+          <CookiesTable deviceId={deviceId} />
+        </TabsContent>
+
+        {/* Authenticator Tab */}
+        <TabsContent value="authenticator">
+          <AuthenticatorTable deviceId={deviceId} />
         </TabsContent>
 
         {/* Autofill Tab */}

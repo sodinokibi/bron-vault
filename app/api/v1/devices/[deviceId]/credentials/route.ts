@@ -27,6 +27,8 @@ export async function GET(
     const browser = searchParams.get("browser") || ""
     const domain = searchParams.get("domain") || ""
     const searchQuery = searchParams.get("q") || ""
+    const categoryFilter = searchParams.get("category") || ""
+    const riskFilter = searchParams.get("risk") || ""
 
     // Build WHERE clause
     let whereClause = "WHERE device_id = ?"
@@ -45,6 +47,20 @@ export async function GET(
     if (searchQuery) {
       whereClause += " AND (username LIKE ? OR url LIKE ? OR domain LIKE ?)"
       queryParams.push(`%${searchQuery}%`, `%${searchQuery}%`, `%${searchQuery}%`)
+    }
+
+    if (categoryFilter) {
+      const categories = categoryFilter.split(",").map(c => c.trim())
+      const categoryConditions = categories.map(() => "primary_category = ?")
+      whereClause += ` AND (${categoryConditions.join(" OR ")})`
+      queryParams.push(...categories)
+    }
+
+    if (riskFilter) {
+      const riskLevels = riskFilter.split(",").map(r => r.trim())
+      const riskConditions = riskLevels.map(() => "risk_level = ?")
+      whereClause += ` AND (${riskConditions.join(" OR ")})`
+      queryParams.push(...riskLevels)
     }
 
     // Get total count
