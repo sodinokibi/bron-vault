@@ -29,6 +29,13 @@ This guide explains how to use the new enhanced wallet extraction that provides 
 - Graceful fallback on extraction errors
 - Detailed logging for debugging
 
+### ✅ **Comprehensive Public Key Extraction**
+- **Multi-chain support:** ETH, SOL, BTC, SUI, COSMOS, NEAR, APTOS
+- **Multiple formats:** Compressed (33 bytes), Uncompressed (64/65 bytes), Base58 (Solana), Ed25519 (NEAR)
+- **Smart validation:** Chain-specific public key validation and detection
+- **Automatic deduplication:** Removes duplicate public keys across all formats
+- **HD wallet correlation:** Can link public keys to potential HD wallet derivation paths
+
 ---
 
 ## Installation
@@ -265,6 +272,92 @@ console.log(`Recommendation: ${analysis.recommendation}`)
 
 ---
 
+## Public Key Extraction
+
+### What are Public Keys?
+
+Public keys are cryptographic keys that can be derived from private keys. They're used to:
+- **Verify signatures** - Confirm transactions were signed by the private key
+- **Derive addresses** - Generate wallet addresses (especially for HD wallets)
+- **Correlate wallets** - Link multiple addresses to the same seed phrase
+
+### Supported Chains & Formats
+
+| Chain | Format | Length | Example |
+|-------|--------|--------|---------|
+| **Ethereum** | Compressed | 66 hex (33 bytes) | `02a1b2c3...` |
+| **Ethereum** | Uncompressed | 128 hex (64 bytes) | `a1b2c3d4...` |
+| **Solana** | Base58 | 32-44 chars | `7xKXtg2CW87d...` |
+| **Bitcoin** | Compressed | 66 hex (33 bytes) | `03a1b2c3...` |
+| **Bitcoin** | Uncompressed | 130 hex (65 bytes) | `04a1b2c3...` |
+| **Sui** | Hex | 64 hex (32 bytes) | `a1b2c3d4...` |
+| **Cosmos** | Compressed | 66 hex (33 bytes) | `02a1b2c3...` |
+| **NEAR** | Ed25519 | `ed25519:` prefix | `ed25519:H9k5...` |
+| **Aptos** | Hex | 64 hex (32 bytes) | `a1b2c3d4...` |
+
+### Extract Public Keys
+
+```typescript
+import { parseEnhancedBrowserWallets, generatePublicKeyReport } from './enhanced-wallet-integration'
+
+const wallets = await parseEnhancedBrowserWallets(browserDataPath)
+
+// Generate comprehensive report
+const report = generatePublicKeyReport(wallets)
+console.log(report)
+
+// Export by chain
+const publicKeysByChain = exportPublicKeysByChain(wallets)
+console.log(`Ethereum public keys: ${publicKeysByChain.ETH.length}`)
+console.log(`Solana public keys: ${publicKeysByChain.SOL.length}`)
+```
+
+### Example Output
+
+```
+# PUBLIC KEY EXTRACTION REPORT
+
+## Summary
+
+- Total public keys: 45
+- Ethereum/EVM: 12
+- Solana: 18
+- Bitcoin: 8
+- Sui: 4
+- Cosmos: 2
+- NEAR: 1
+- Aptos: 0
+- Unknown: 0
+
+## Ethereum/EVM Public Keys
+
+1. `02a1b2c3d4e5f6789012345678901234567890123456789012345678901234`
+2. `03b2c3d4e5f6789012345678901234567890123456789012345678901234567`
+...
+```
+
+### HD Wallet Analysis
+
+Public keys can reveal HD wallet patterns:
+
+```typescript
+import { analyzeSeedDerivation } from './hd-wallet-analyzer'
+
+const foundAddresses = wallets.map(w => w.address).filter(Boolean)
+
+const analysis = analyzeSeedDerivation(
+  seedPhrase,      // From recovered vault
+  foundAddresses,  // Addresses found in wallet data
+  'ETH'           // Primary blockchain
+)
+
+console.log(`Detected pattern: ${analysis.detectedPattern}`) // e.g., "MetaMask"
+console.log(`Estimated addresses: ${analysis.estimatedAddresses}`)
+console.log(`Derivation paths:`, analysis.potentialPaths)
+```
+
+---
+
 ## API Changes
 
 ### Breaking Changes
@@ -291,6 +384,24 @@ extractWalletExtension(path, name): Promise<ExtractedWalletData>
 exportVaultHashes(wallets): { metamask, phantom, other }
 analyzeVaultCrackability(vaultData): { difficulty, estimatedTime, recommendation }
 generateVaultCrackingReport(wallets): string
+
+// Public key extraction (NEW)
+extractPublicKeysFromText(content): PublicKey[]
+extractPublicKeysFromJSON(obj): PublicKey[]
+analyzePublicKeys(publicKeys): PublicKeyExtractionResult
+deduplicatePublicKeys(publicKeys): PublicKey[]
+exportPublicKeysByChain(wallets): { ETH, SOL, BTC, SUI, COSMOS, NEAR, APTOS, UNKNOWN }
+generatePublicKeyReport(wallets): string
+
+// Public key validation (NEW)
+isValidEthereumPublicKey(pubKey): boolean
+isValidSolanaPublicKey(pubKey): boolean
+isValidBitcoinPublicKey(pubKey): boolean
+isValidSuiPublicKey(pubKey): boolean
+isValidCosmosPublicKey(pubKey): boolean
+isValidNearPublicKey(pubKey): boolean
+isValidAptosPublicKey(pubKey): boolean
+detectChainFromPublicKey(pubKey): 'ETH' | 'SOL' | 'BTC' | ...
 
 // Address deduplication
 deduplicateAddresses(addresses): WalletAddress[]

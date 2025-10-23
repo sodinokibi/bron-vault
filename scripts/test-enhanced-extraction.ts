@@ -5,7 +5,8 @@
  */
 
 import { extractMetaMaskData, extractPhantomData } from '../lib/stealer-parsers/leveldb-wallet-extractor'
-import { generateVaultCrackingReport, analyzeVaultCrackability } from '../lib/stealer-parsers/enhanced-wallet-integration'
+import { generateVaultCrackingReport, analyzeVaultCrackability, generatePublicKeyReport } from '../lib/stealer-parsers/enhanced-wallet-integration'
+import { analyzePublicKeys } from '../lib/stealer-parsers/public-key-extractor'
 import { existsSync } from 'fs'
 import path from 'path'
 
@@ -28,6 +29,7 @@ async function testExtraction() {
 
       console.log(`\n✅ MetaMask Results:`)
       console.log(`   Addresses found: ${metamaskData.totalAddresses}`)
+      console.log(`   Public keys found: ${metamaskData.publicKeys.length}`)
       console.log(`   Account names: ${metamaskData.accountNames.length}`)
       console.log(`   Vault hash: ${metamaskData.vaultHash ? 'YES ✅' : 'NO ❌'}`)
 
@@ -35,6 +37,18 @@ async function testExtraction() {
         console.log(`\n   Sample Addresses:`)
         metamaskData.addresses.slice(0, 5).forEach((addr, i) => {
           console.log(`   ${i + 1}. ${addr.address} (${addr.chain}, ${addr.type})`)
+        })
+      }
+
+      if (metamaskData.publicKeys.length > 0) {
+        console.log(`\n   🔑 Public Keys:`)
+        const pkAnalysis = analyzePublicKeys(metamaskData.publicKeys)
+        console.log(`      Total: ${pkAnalysis.totalFound}`)
+        console.log(`      By chain: ETH=${pkAnalysis.byChain.ETH}, SOL=${pkAnalysis.byChain.SOL}, BTC=${pkAnalysis.byChain.BTC}`)
+
+        console.log(`\n   Sample Public Keys:`)
+        metamaskData.publicKeys.slice(0, 3).forEach((pk, i) => {
+          console.log(`   ${i + 1}. ${pk.publicKey.substring(0, 32)}... (${pk.chain}, ${pk.format}, ${pk.length} bytes)`)
         })
       }
 
@@ -77,6 +91,7 @@ async function testExtraction() {
 
       console.log(`\n✅ Phantom Results:`)
       console.log(`   Total addresses: ${phantomData.totalAddresses}`)
+      console.log(`   Public keys found: ${phantomData.publicKeys.length}`)
       console.log(`   Vault hash: ${phantomData.vaultHash ? 'YES ✅' : 'NO ❌'}`)
 
       // Group by chain
@@ -113,6 +128,18 @@ async function testExtraction() {
         console.log(`   🔵 Sui: ${byChain.SUI.length}`)
         byChain.SUI.slice(0, 3).forEach(addr => {
           console.log(`      - ${addr.address}`)
+        })
+      }
+
+      if (phantomData.publicKeys.length > 0) {
+        console.log(`\n   🔑 Public Keys:`)
+        const pkAnalysis = analyzePublicKeys(phantomData.publicKeys)
+        console.log(`      Total: ${pkAnalysis.totalFound}`)
+        console.log(`      By chain: SOL=${pkAnalysis.byChain.SOL}, ETH=${pkAnalysis.byChain.ETH}, BTC=${pkAnalysis.byChain.BTC}, SUI=${pkAnalysis.byChain.SUI}`)
+
+        console.log(`\n   Sample Public Keys:`)
+        phantomData.publicKeys.slice(0, 3).forEach((pk, i) => {
+          console.log(`   ${i + 1}. ${pk.publicKey.substring(0, 32)}... (${pk.chain}, ${pk.format})`)
         })
       }
 

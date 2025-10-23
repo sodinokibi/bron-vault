@@ -96,11 +96,27 @@ function convertToCryptoWallet(
     })
   }
 
+  // Add public keys as separate wallet entries (for tracking)
+  for (const pubKey of extracted.publicKeys) {
+    wallets.push({
+      wallet_type: 'browser_extension',
+      wallet_name: extracted.walletName,
+      blockchain: pubKey.chain,
+      file_path: extensionPath,
+      extension_id: extracted.extensionId,
+      wallet_software: extracted.walletName,
+      public_key: pubKey.publicKey,
+      public_key_format: pubKey.format,
+      notes: `Public key extracted - ${pubKey.chain} ${pubKey.format} (${pubKey.length} bytes)`
+    })
+  }
+
   // Add account names
   for (const accountName of extracted.accountNames) {
     const existingWallet = wallets.find(w =>
       w.extension_id === extracted.extensionId &&
-      !w.account_name
+      !w.account_name &&
+      !w.public_key
     )
 
     if (existingWallet) {
@@ -143,12 +159,26 @@ export async function parseEnhancedBrowserWallets(
           // Use enhanced extractor
           const extracted = await extractWalletExtension(extensionPath, walletName)
 
-          if (extracted.totalAddresses > 0 || extracted.vaultHash) {
-            console.log(`✅ ${walletName}: ${extracted.totalAddresses} addresses`)
+          if (extracted.totalAddresses > 0 || extracted.vaultHash || extracted.publicKeys.length > 0) {
+            console.log(`✅ ${walletName}: ${extracted.totalAddresses} addresses, ${extracted.publicKeys.length} public keys`)
 
             if (extracted.vaultHash) {
               console.log(`   🔐 Vault hash extracted (${extracted.vaultHash.hashcatMode})`)
               console.log(`   ⚠️  Can crack with: hashcat ${extracted.vaultHash.hashcatMode} hash.txt wordlist.txt`)
+            }
+
+            if (extracted.publicKeys.length > 0) {
+              // Count by chain
+              const byChain: Record<string, number> = {}
+              for (const pk of extracted.publicKeys) {
+                byChain[pk.chain] = (byChain[pk.chain] || 0) + 1
+              }
+
+              const chainSummary = Object.entries(byChain)
+                .map(([chain, count]) => `${chain}:${count}`)
+                .join(', ')
+
+              console.log(`   🔑 Public keys: ${chainSummary}`)
             }
 
             // Convert to CryptoWallet format
@@ -267,6 +297,156 @@ export function analyzeVaultCrackability(vaultData: any): {
     },
     recommendation
   }
+}
+
+/**
+ * Export public keys grouped by blockchain
+ */
+export function exportPublicKeysByChain(wallets: CryptoWallet[]): {
+  ETH: string[]
+  SOL: string[]
+  BTC: string[]
+  SUI: string[]
+  COSMOS: string[]
+  NEAR: string[]
+  APTOS: string[]
+  UNKNOWN: string[]
+} {
+  const publicKeys = {
+    ETH: [] as string[],
+    SOL: [] as string[],
+    BTC: [] as string[],
+    SUI: [] as string[],
+    COSMOS: [] as string[],
+    NEAR: [] as string[],
+    APTOS: [] as string[],
+    UNKNOWN: [] as string[]
+  }
+
+  for (const wallet of wallets) {
+    if (!wallet.public_key) continue
+
+    const chain = wallet.blockchain || 'UNKNOWN'
+
+    if (chain in publicKeys) {
+      publicKeys[chain as keyof typeof publicKeys].push(wallet.public_key)
+    } else {
+      publicKeys.UNKNOWN.push(wallet.public_key)
+    }
+  }
+
+  // Deduplicate
+  for (const chain in publicKeys) {
+    publicKeys[chain as keyof typeof publicKeys] = [
+      ...new Set(publicKeys[chain as keyof typeof publicKeys])
+    ]
+  }
+
+  return publicKeys
+}
+
+/**
+ * Generate public key extraction report
+ */
+export function generatePublicKeyReport(wallets: CryptoWallet[]): string {
+  const publicKeysByChain = exportPublicKeysByChain(wallets)
+
+  let report = '# PUBLIC KEY EXTRACTION REPORT\n\n'
+
+  const totalKeys = Object.values(publicKeysByChain).reduce((sum, keys) => sum + keys.length, 0)
+
+  if (totalKeys === 0) {
+    return report + 'No public keys found.\n'
+  }
+
+  report += `## Summary\n\n`
+  report += `- Total public keys: ${totalKeys}\n`
+  report += `- Ethereum/EVM: ${publicKeysByChain.ETH.length}\n`
+  report += `- Solana: ${publicKeysByChain.SOL.length}\n`
+  report += `- Bitcoin: ${publicKeysByChain.BTC.length}\n`
+  report += `- Sui: ${publicKeysByChain.SUI.length}\n`
+  report += `- Cosmos: ${publicKeysByChain.COSMOS.length}\n`
+  report += `- NEAR: ${publicKeysByChain.NEAR.length}\n`
+  report += `- Aptos: ${publicKeysByChain.APTOS.length}\n`
+  report += `- Unknown: ${publicKeysByChain.UNKNOWN.length}\n\n`
+
+  // Ethereum public keys
+  if (publicKeysByChain.ETH.length > 0) {
+    report += `## Ethereum/EVM Public Keys\n\n`
+    publicKeysByChain.ETH.forEach((pk, i) => {
+      report += `${i + 1}. \`${pk}\`\n`
+    })
+    report += `\n`
+  }
+
+  // Solana public keys
+  if (publicKeysByChain.SOL.length > 0) {
+    report += `## Solana Public Keys\n\n`
+    publicKeysByChain.SOL.forEach((pk, i) => {
+      report += `${i + 1}. \`${pk}\`\n`
+    })
+    report += `\n`
+  }
+
+  // Bitcoin public keys
+  if (publicKeysByChain.BTC.length > 0) {
+    report += `## Bitcoin Public Keys\n\n`
+    publicKeysByChain.BTC.forEach((pk, i) => {
+      report += `${i + 1}. \`${pk}\`\n`
+    })
+    report += `\n`
+  }
+
+  // Sui public keys
+  if (publicKeysByChain.SUI.length > 0) {
+    report += `## Sui Public Keys\n\n`
+    publicKeysByChain.SUI.forEach((pk, i) => {
+      report += `${i + 1}. \`${pk}\`\n`
+    })
+    report += `\n`
+  }
+
+  // Cosmos public keys
+  if (publicKeysByChain.COSMOS.length > 0) {
+    report += `## Cosmos Public Keys\n\n`
+    publicKeysByChain.COSMOS.forEach((pk, i) => {
+      report += `${i + 1}. \`${pk}\`\n`
+    })
+    report += `\n`
+  }
+
+  // NEAR public keys
+  if (publicKeysByChain.NEAR.length > 0) {
+    report += `## NEAR Public Keys\n\n`
+    publicKeysByChain.NEAR.forEach((pk, i) => {
+      report += `${i + 1}. \`${pk}\`\n`
+    })
+    report += `\n`
+  }
+
+  // Aptos public keys
+  if (publicKeysByChain.APTOS.length > 0) {
+    report += `## Aptos Public Keys\n\n`
+    publicKeysByChain.APTOS.forEach((pk, i) => {
+      report += `${i + 1}. \`${pk}\`\n`
+    })
+    report += `\n`
+  }
+
+  // Unknown public keys
+  if (publicKeysByChain.UNKNOWN.length > 0) {
+    report += `## Unknown Chain Public Keys\n\n`
+    publicKeysByChain.UNKNOWN.forEach((pk, i) => {
+      report += `${i + 1}. \`${pk}\`\n`
+    })
+    report += `\n`
+  }
+
+  report += `\n---\n\n`
+  report += `**Note:** Public keys can be used to derive addresses and verify ownership.\n`
+  report += `For HD wallets, these public keys may be derived from a master seed phrase.\n`
+
+  return report
 }
 
 /**

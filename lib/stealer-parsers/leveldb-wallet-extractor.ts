@@ -12,6 +12,12 @@ import { ClassicLevel } from 'classic-level'
 import { existsSync } from 'fs'
 import path from 'path'
 import { createHash } from 'crypto'
+import {
+  extractPublicKeysFromText,
+  extractPublicKeysFromJSON,
+  deduplicatePublicKeys,
+  type PublicKey
+} from './public-key-extractor'
 
 export interface WalletAddress {
   address: string
@@ -35,7 +41,7 @@ export interface ExtractedWalletData {
   addresses: WalletAddress[]
   vaultHash?: VaultHash
   accountNames: string[]
-  publicKeys: string[]
+  publicKeys: PublicKey[]
   networkConfigs: any[]
   totalAddresses: number
 }
@@ -103,6 +109,16 @@ export async function extractMetaMaskData(extensionPath: string): Promise<Extrac
         // Extract from JSON objects
         if (typeof parsedValue === 'object' && parsedValue !== null) {
           extractMetaMaskFromJSON(parsedValue, result)
+
+          // Extract public keys from JSON
+          const publicKeys = extractPublicKeysFromJSON(parsedValue)
+          result.publicKeys.push(...publicKeys)
+        }
+
+        // Extract public keys from text values
+        if (typeof value === 'string' && value.length > 32) {
+          const publicKeys = extractPublicKeysFromText(value)
+          result.publicKeys.push(...publicKeys)
         }
 
       } catch (err) {
@@ -115,6 +131,8 @@ export async function extractMetaMaskData(extensionPath: string): Promise<Extrac
     console.error('Error iterating MetaMask database:', err)
   }
 
+  // Deduplicate public keys
+  result.publicKeys = deduplicatePublicKeys(result.publicKeys)
   result.totalAddresses = result.addresses.length
   return result
 }
@@ -281,6 +299,29 @@ export async function extractPhantomData(extensionPath: string): Promise<Extract
           extractPhantomVaultHash(value, result)
         }
 
+        // Extract public keys from all values
+        if (typeof value === 'string') {
+          // Try JSON parsing first
+          let parsedValue: any = value
+          if (value.startsWith('{') || value.startsWith('[')) {
+            try {
+              parsedValue = JSON.parse(value)
+              if (typeof parsedValue === 'object' && parsedValue !== null) {
+                const publicKeys = extractPublicKeysFromJSON(parsedValue)
+                result.publicKeys.push(...publicKeys)
+              }
+            } catch (e) {
+              // Not JSON, try text extraction
+            }
+          }
+
+          // Extract from text
+          if (value.length > 32) {
+            const publicKeys = extractPublicKeysFromText(value)
+            result.publicKeys.push(...publicKeys)
+          }
+        }
+
       } catch (err) {
         // Skip invalid entries
       }
@@ -291,6 +332,8 @@ export async function extractPhantomData(extensionPath: string): Promise<Extract
     console.error('Error iterating Phantom database:', err)
   }
 
+  // Deduplicate public keys
+  result.publicKeys = deduplicatePublicKeys(result.publicKeys)
   result.totalAddresses = result.addresses.length
   return result
 }
@@ -543,6 +586,25 @@ async function extractGenericWalletData(
           })
         }
 
+        // Extract public keys from text
+        if (value.length > 32) {
+          const publicKeys = extractPublicKeysFromText(value)
+          result.publicKeys.push(...publicKeys)
+        }
+
+        // Try JSON parsing for public keys
+        if (value.startsWith('{') || value.startsWith('[')) {
+          try {
+            const parsedValue = JSON.parse(value)
+            if (typeof parsedValue === 'object' && parsedValue !== null) {
+              const publicKeys = extractPublicKeysFromJSON(parsedValue)
+              result.publicKeys.push(...publicKeys)
+            }
+          } catch (e) {
+            // Not valid JSON
+          }
+        }
+
       } catch (err) {
         // Skip invalid entries
       }
@@ -552,6 +614,9 @@ async function extractGenericWalletData(
   } catch (err) {
     console.error(`Error extracting ${walletName}:`, err)
   }
+
+  // Deduplicate public keys
+  result.publicKeys = deduplicatePublicKeys(result.publicKeys)
 
   // Deduplicate addresses
   const seen = new Set<string>()
