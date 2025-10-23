@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Cookie, Download, Shield, AlertTriangle, CheckCircle, Lock, Globe } from "lucide-react"
+import { Cookie, Download, Shield, AlertTriangle, CheckCircle, Lock, Globe, Clock, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 interface CookiesTableProps {
@@ -20,12 +20,10 @@ interface CookieData {
   name: string
   value: string
   path: string
-  expires_utc: string
+  expires_utc: number
   is_secure: boolean
   is_httponly: boolean
-  has_expires: boolean
-  is_persistent: boolean
-  samesite: string | null
+  same_site: string | null
   primary_category: string
   categories: string[]
   risk_level: string
@@ -34,6 +32,13 @@ interface CookieData {
   profile: string
   file_path: string
   created_at: string
+
+  // New expiration tracking fields
+  is_session_cookie: boolean
+  is_live: boolean
+  expires_at: string | null
+  days_until_expiry: number | null
+  days_since_expiry: number | null
 }
 
 interface CookiesResponse {
@@ -44,18 +49,29 @@ interface CookiesResponse {
   filters: {
     category: string | null
     risk: string | null
+    status: string | null
+    profile: string | null
   }
   stats: {
     total_cookies: number
     unique_domains: number
     unique_browsers: number
+    unique_profiles: number
     secure_cookies: number
     httponly_cookies: number
-    persistent_cookies: number
+
+    // Expiration status
+    live_cookies: number
+    expired_cookies: number
+    session_cookies: number
+
+    // Risk breakdown
     critical_risk: number
     high_risk: number
     medium_risk: number
     low_risk: number
+
+    // Category breakdown (total)
     crypto_cookies: number
     banking_cookies: number
     corporate_cookies: number
@@ -64,20 +80,46 @@ interface CookiesResponse {
     social_cookies: number
     ecommerce_cookies: number
     gaming_cookies: number
+
+    // Category breakdown (live only)
+    live_crypto: number
+    live_banking: number
+    live_corporate: number
+    live_email: number
+    live_cloud: number
+    live_social: number
+    live_ecommerce: number
+    live_gaming: number
   }
   cookies: {
     all: CookieData[]
     by_category: Record<string, CookieData[]>
     by_risk: Record<string, CookieData[]>
     by_domain: Record<string, CookieData[]>
+    by_profile: Record<string, CookieData[]>
     top_domains: Array<{
       domain: string
-      count: number
+      total_count: number
+      live_count: number
+      expired_count: number
+      session_count: number
       primary_category: string
       risk_level: string
       risk_score: number
     }>
+    profile_stats: Array<{
+      profile: string
+      total_count: number
+      live_count: number
+      expired_count: number
+      session_count: number
+      browsers: string[]
+      live_crypto: number
+      live_banking: number
+      live_corporate: number
+    }>
     high_value_targets: CookieData[]
+    live_high_value_targets: CookieData[]
   }
 }
 
@@ -86,10 +128,12 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
   const [loading, setLoading] = useState(true)
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [riskFilter, setRiskFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [profileFilter, setProfileFilter] = useState<string>("all")
 
   useEffect(() => {
     fetchCookies()
-  }, [deviceId, categoryFilter, riskFilter])
+  }, [deviceId, categoryFilter, riskFilter, statusFilter, profileFilter])
 
   const fetchCookies = async () => {
     try {
@@ -102,6 +146,12 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
       }
       if (riskFilter !== "all") {
         params.append("risk", riskFilter)
+      }
+      if (statusFilter !== "all") {
+        params.append("status", statusFilter)
+      }
+      if (profileFilter !== "all") {
+        params.append("profile", profileFilter)
       }
 
       if (params.toString()) {
@@ -191,6 +241,33 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
     )
   }
 
+  const getStatusBadge = (cookie: CookieData) => {
+    if (cookie.is_session_cookie) {
+      return (
+        <Badge variant="outline" className="flex items-center gap-1 w-fit">
+          <Cookie className="h-3 w-3" />
+          SESSION
+        </Badge>
+      )
+    }
+
+    if (cookie.is_live) {
+      return (
+        <Badge className="bg-green-600 flex items-center gap-1 w-fit">
+          <CheckCircle className="h-3 w-3" />
+          LIVE {cookie.days_until_expiry && `(${cookie.days_until_expiry}d)`}
+        </Badge>
+      )
+    }
+
+    return (
+      <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+        <XCircle className="h-3 w-3" />
+        EXPIRED {cookie.days_since_expiry && `(${cookie.days_since_expiry}d ago)`}
+      </Badge>
+    )
+  }
+
   if (loading) {
     return <div className="text-center py-8">Loading cookies...</div>
   }
@@ -217,56 +294,64 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
       )}
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Cookies</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Live Cookies</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.stats.total_cookies}</div>
+            <div className="text-2xl font-bold text-green-500">{data.stats.live_cookies}</div>
+            <p className="text-xs text-muted-foreground">{data.stats.expired_cookies} expired</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Live Crypto</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-500">{data.stats.live_crypto}</div>
+            <p className="text-xs text-muted-foreground">of {data.stats.crypto_cookies} total</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Live Banking</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-500">{data.stats.live_banking}</div>
+            <p className="text-xs text-muted-foreground">of {data.stats.banking_cookies} total</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Live Corporate</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-500">{data.stats.live_corporate}</div>
+            <p className="text-xs text-muted-foreground">of {data.stats.corporate_cookies} total</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Session Cookies</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-500">{data.stats.session_cookies}</div>
+            <p className="text-xs text-muted-foreground">no expiration</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Profiles</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{data.stats.unique_profiles}</div>
             <p className="text-xs text-muted-foreground">{data.stats.unique_domains} domains</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Crypto</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-500">{data.stats.crypto_cookies}</div>
-            <p className="text-xs text-muted-foreground">crypto cookies</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Banking</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">{data.stats.banking_cookies}</div>
-            <p className="text-xs text-muted-foreground">banking cookies</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Corporate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-500">{data.stats.corporate_cookies}</div>
-            <p className="text-xs text-muted-foreground">corporate cookies</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">High Risk</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-500">
-              {data.stats.critical_risk + data.stats.high_risk}
-            </div>
-            <p className="text-xs text-muted-foreground">critical/high risk</p>
           </CardContent>
         </Card>
       </div>
@@ -327,6 +412,40 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium">Status:</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="live">Live Only</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                  <SelectItem value="session">Session Cookies</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {data.stats.unique_profiles > 0 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">Profile:</label>
+                <Select value={profileFilter} onValueChange={setProfileFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Profiles</SelectItem>
+                    {data.cookies.profile_stats?.map(profile => (
+                      <SelectItem key={profile.profile} value={profile.profile}>
+                        {profile.profile} ({profile.live_count} live)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           <ScrollArea className="h-[600px]">
@@ -335,7 +454,8 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
                 <TableRow>
                   <TableHead>Domain</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead>Value</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Expires</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Risk</TableHead>
                   <TableHead>Security</TableHead>
@@ -345,7 +465,7 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
               <TableBody>
                 {data.cookies.all.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                       No cookies found matching the selected filters
                     </TableCell>
                   </TableRow>
@@ -358,9 +478,19 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
                           {cookie.host_key}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{cookie.name}</TableCell>
-                      <TableCell className="max-w-xs truncate font-mono text-xs">
-                        {cookie.value}
+                      <TableCell className="font-mono text-xs max-w-[200px] truncate">{cookie.name}</TableCell>
+                      <TableCell>{getStatusBadge(cookie)}</TableCell>
+                      <TableCell>
+                        {cookie.expires_at ? (
+                          <div className="text-xs">
+                            <div>{new Date(cookie.expires_at).toLocaleDateString()}</div>
+                            <div className="text-muted-foreground">
+                              {new Date(cookie.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Session</span>
+                        )}
                       </TableCell>
                       <TableCell>{getCategoryBadge(cookie.primary_category)}</TableCell>
                       <TableCell>{getRiskBadge(cookie.risk_level, cookie.risk_score)}</TableCell>
@@ -390,10 +520,11 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
         </CardContent>
       </Card>
 
-      {/* Top Domains */}
+      {/* Top Domains by Live Cookie Count */}
       <Card>
         <CardHeader>
-          <CardTitle>Top Domains by Cookie Count</CardTitle>
+          <CardTitle>Top Domains by Live Cookies</CardTitle>
+          <CardDescription>Domains sorted by number of valid (non-expired) cookies</CardDescription>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[300px]">
@@ -401,7 +532,9 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Domain</TableHead>
-                  <TableHead>Cookies</TableHead>
+                  <TableHead>Live</TableHead>
+                  <TableHead>Expired</TableHead>
+                  <TableHead>Session</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Risk</TableHead>
                 </TableRow>
@@ -410,7 +543,15 @@ export function CookiesTable({ deviceId }: CookiesTableProps) {
                 {data.cookies.top_domains.map((domain, index) => (
                   <TableRow key={index}>
                     <TableCell className="font-medium">{domain.domain}</TableCell>
-                    <TableCell>{domain.count}</TableCell>
+                    <TableCell>
+                      <Badge className="bg-green-600">{domain.live_count}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{domain.expired_count}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{domain.session_count}</Badge>
+                    </TableCell>
                     <TableCell>{getCategoryBadge(domain.primary_category)}</TableCell>
                     <TableCell>{getRiskBadge(domain.risk_level, domain.risk_score)}</TableCell>
                   </TableRow>
